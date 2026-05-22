@@ -1,57 +1,70 @@
-import { useState } from 'react'
-
+import { useState, useEffect } from 'react'
 import DashboardLayout from '../components/layouts/DashboardLayout'
 import MapShell from '../components/MapShell'
+import HeatMapShell from '../components/HeatMapShell'
+import { supabase } from '../services/supabase'
 
 const AdminDashboard = () => {
 
   const [activeTab, setActiveTab] = useState('dashboard')
 
-  const [complaints, setComplaints] = useState([
-    {
-      id: 1,
-      citizen: 'Rahul Sharma',
-      type: 'Pothole',
-      area: 'Nerul',
-      department: 'Road Maintenance',
-      status: 'Pending'
-    },
+const [complaints, setComplaints] =
+  useState([])
+  useEffect(() => {
 
-    {
-      id: 2,
-      citizen: 'Priya Verma',
-      type: 'Garbage',
-      area: 'Vashi',
-      department: 'Sanitation',
-      status: 'Resolved'
-    },
+  fetchComplaints()
 
-    {
-      id: 3,
-      citizen: 'Amit Patil',
-      type: 'Drainage',
-      area: 'Belapur',
-      department: 'Drainage',
-      status: 'In Progress'
-    }
-  ])
+}, [])
 
-  const updateStatus = (id, value) => {
+const fetchComplaints = async () => {
 
-    const updated = complaints.map((item) => {
+  const { data, error } =
+    await supabase
+      .from('complaints')
+      .select('*')
+      .order('id', { ascending: false })
 
-      if (item.id === id) {
-        return {
-          ...item,
-          status: value
-        }
-      }
+  if (error) {
 
-      return item
-    })
-
-    setComplaints(updated)
+    console.log(error)
+    return
   }
+
+  setComplaints(data)
+}
+const updateStatus = async (id, value) => {
+
+  let progressValue = 0
+
+  if (value === 'Pending') {
+    progressValue = 25
+  }
+
+  if (value === 'In Progress') {
+    progressValue = 65
+  }
+
+  if (value === 'Resolved') {
+    progressValue = 100
+  }
+
+  const { error } =
+    await supabase
+      .from('complaints')
+      .update({
+        status: value,
+        progress: progressValue
+      })
+      .eq('id', id)
+
+  if (error) {
+
+    console.log(error)
+    return
+  }
+
+  fetchComplaints()
+}
 
   const totalComplaints = complaints.length
 
@@ -156,186 +169,207 @@ const AdminDashboard = () => {
 
   const renderManageComplaints = () => {
 
-    return (
+  return (
 
-      <div className="tab-page">
+    <div className="tab-page">
 
-        <div className="track-header">
-
-          <h1 className="page-title">
-            Manage Complaints
-          </h1>
-
-          <div className="track-count">
-            Total : {complaints.length}
-          </div>
-
-        </div>
-
-        <div className="table-container">
-
-          <table className="complaint-table">
-
-            <thead>
-
-              <tr>
-
-                <th>ID</th>
-                <th>Citizen</th>
-                <th>Complaint</th>
-                <th>Area</th>
-                <th>Department</th>
-                <th>Status</th>
-                <th>Action</th>
-
-              </tr>
-
-            </thead>
-
-            <tbody>
-
-              {
-                complaints.map((item) => (
-
-                  <tr key={item.id}>
-
-                    <td>
-                      #{item.id}
-                    </td>
-
-                    <td>
-                      {item.citizen}
-                    </td>
-
-                    <td>
-                      {item.type}
-                    </td>
-
-                    <td>
-                      {item.area}
-                    </td>
-
-                    <td>
-                      {item.department}
-                    </td>
-
-                    <td>
-
-                      <span
-                        className={`status-badge
-                        ${
-                          item.status === 'Resolved'
-                          ? 'resolved-badge'
-                          : item.status === 'In Progress'
-                          ? 'progress-badge'
-                          : 'pending-badge'
-                        }`}
-                      >
-
-                        {item.status}
-
-                      </span>
-
-                    </td>
-
-                    <td>
-
-                      <select
-                        className="admin-action-select"
-                        value={item.status}
-                        onChange={(e) =>
-                          updateStatus(
-                            item.id,
-                            e.target.value
-                          )
-                        }
-                      >
-
-                        <option>
-                          Pending
-                        </option>
-
-                        <option>
-                          In Progress
-                        </option>
-
-                        <option>
-                          Resolved
-                        </option>
-
-                      </select>
-
-                    </td>
-
-                  </tr>
-
-                ))
-              }
-
-            </tbody>
-
-          </table>
-
-        </div>
-
-      </div>
-    )
-  }
-
-  const renderAnalytics = () => {
-
-    return (
-
-      <div className="tab-page">
+      <div className="track-header">
 
         <h1 className="page-title">
-          Analytics
+          Manage Complaints
         </h1>
 
-        <div className="analytics-grid">
+        <div className="track-count">
+          Total : {complaints.length}
+        </div>
 
-          <div className="analytics-card">
+      </div>
 
-            <h2>
-              Most Complaints Area
-            </h2>
+      <div className="complaint-progress-list">
 
-            <p>
-              Nerul Sector 5
-            </p>
+        {
+          complaints.map((item) => (
 
-          </div>
+            <div
+              key={item.id}
+              className="progress-card-box"
+            >
 
-          <div className="analytics-card">
+              <div className="progress-top">
 
-            <h2>
-              Most Common Issue
-            </h2>
+                <div>
 
-            <p>
-              Potholes
-            </p>
+                  <h2>
+                    {item.complaint_type}
+                  </h2>
 
-          </div>
+                  <p>
+                    {item.full_name}
+                  </p>
 
-          <div className="analytics-card">
+                </div>
 
-            <h2>
-              Resolution Rate
-            </h2>
+                <span
+                  className={`status-badge
+                  ${
+                    item.status === 'Resolved'
+                    ? 'resolved-badge'
+                    : item.status === 'In Progress'
+                    ? 'progress-badge'
+                    : 'pending-badge'
+                  }`}
+                >
 
-            <p>
-              74%
-            </p>
+                  {item.status || 'Pending'}
 
-          </div>
+                </span>
+
+              </div>
+
+              <div className="progress-location">
+
+                📍
+                {
+                  item.latitude &&
+                  item.longitude
+                  ? `${item.latitude.toFixed(4)},
+                     ${item.longitude.toFixed(4)}`
+                  : 'N/A'
+                }
+
+              </div>
+
+              <div className="progress-bar-wrapper">
+
+                <div
+                  className="progress-bar-fill"
+                  style={{
+                   width:
+                item.status === 'Resolved'
+                 ? '100%'
+                   : item.status === 'In Progress'
+                  ? '60%'
+                     : '25%'
+                  }}
+                ></div>
+
+              </div>
+
+              <div className="progress-bottom">
+
+                <span>
+                 Progress :
+                      {
+                    item.status === 'Resolved'
+                    ? '100'
+                    : item.status === 'In Progress'
+                    ? '60'
+                    : '25'
+                }%
+                </span>
+
+                <select
+                  className="admin-action-select"
+                  value={item.status || 'Pending'}
+                  onChange={(e) =>
+                    updateStatus(
+                      item.id,
+                      e.target.value
+                    )
+                  }
+                >
+
+                  <option>
+                    Pending
+                  </option>
+
+                  <option>
+                    In Progress
+                  </option>
+
+                  <option>
+                    Resolved
+                  </option>
+
+                </select>
+
+              </div>
+
+            </div>
+
+          ))
+        }
+
+      </div>
+
+    </div>
+  )
+}
+const renderAnalytics = () => {
+
+  return (
+
+    <div className="tab-page">
+
+      <h1 className="page-title">
+        Heatmap Analytics
+      </h1>
+
+      <div className="admin-map-wrapper">
+
+        <HeatMapShell />
+
+      </div>
+
+      <div className="analytics-grid">
+
+        <div className="analytics-card">
+
+          <h2>
+            Total Complaints
+          </h2>
+
+          <p>
+            {complaints.length}
+          </p>
+
+        </div>
+
+        <div className="analytics-card">
+
+          <h2>
+            Most Common Issue
+          </h2>
+
+          <p>
+            Potholes
+          </p>
+
+        </div>
+
+        <div className="analytics-card">
+
+          <h2>
+            Resolution Rate
+          </h2>
+
+          <p>
+            {
+              complaints.length
+              ? Math.floor(
+                  (resolvedCount / complaints.length) * 100
+                )
+              : 0
+            }%
+          </p>
 
         </div>
 
       </div>
-    )
-  }
 
+    </div>
+  )
+}
   const renderContent = () => {
 
     if (activeTab === 'complaints') {

@@ -8,6 +8,7 @@ import {
 import Login from '../pages/Login'
 import UserDashboard from '../pages/UserDashboard'
 import AdminDashboard from '../pages/AdminDashboard'
+import DepartmentDashboard from '../pages/DepartmentDashboard'
 
 const AppRoutes = () => {
 
@@ -32,6 +33,10 @@ const AppRoutes = () => {
           element={<AdminDashboard />}
         />
 
+ <Route
+          path="/department-dashboard"
+          element={<DepartmentDashboard/>}
+        />
         <Route
           path="*"
           element={<Navigate to="/" />}

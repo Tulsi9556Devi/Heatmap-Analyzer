@@ -2,11 +2,19 @@ import {
   FaClipboardList,
   FaMapMarkedAlt,
   FaFire,
-  FaChartPie,
-  FaSignOutAlt
+  FaChartPie
 } from 'react-icons/fa'
 
-const Sidebar = ({ activeTab, setActiveTab }) => {
+const Sidebar = ({
+  activeTab,
+  setActiveTab,
+  userData
+}) => {
+
+  const displayName =
+    userData?.full_name ||
+    userData?.dept_name ||
+    'Citizen'
 
   return (
 
@@ -17,14 +25,24 @@ const Sidebar = ({ activeTab, setActiveTab }) => {
         <div className="profile-section">
 
           <img
-            src="https://i.pravatar.cc/150?img=12"
+            src={
+              userData?.profile_image ||
+              'https://i.pravatar.cc/150?img=12'
+            }
             alt="profile"
             className="profile-image"
           />
 
-          <h2>Welcome Alex!</h2>
+          <h2>
+            Welcome {displayName}!
+          </h2>
 
-          <p>📍 Nerul, Navi Mumbai</p>
+          <p>
+            📍 {
+              userData?.location ||
+              'Navi Mumbai'
+            }
+          </p>
 
         </div>
 
@@ -36,7 +54,9 @@ const Sidebar = ({ activeTab, setActiveTab }) => {
                 ? 'active-btn'
                 : ''
             }`}
-            onClick={() => setActiveTab('dashboard')}
+            onClick={() =>
+              setActiveTab('dashboard')
+            }
           >
             <FaChartPie />
             Dashboard
@@ -48,7 +68,9 @@ const Sidebar = ({ activeTab, setActiveTab }) => {
                 ? 'active-btn'
                 : ''
             }`}
-            onClick={() => setActiveTab('complaints')}
+            onClick={() =>
+              setActiveTab('complaints')
+            }
           >
             <FaClipboardList />
             Complaints
@@ -60,7 +82,9 @@ const Sidebar = ({ activeTab, setActiveTab }) => {
                 ? 'active-btn'
                 : ''
             }`}
-            onClick={() => setActiveTab('track')}
+            onClick={() =>
+              setActiveTab('track')
+            }
           >
             <FaMapMarkedAlt />
             Track Complaint
@@ -72,7 +96,9 @@ const Sidebar = ({ activeTab, setActiveTab }) => {
                 ? 'active-btn'
                 : ''
             }`}
-            onClick={() => setActiveTab('heatmap')}
+            onClick={() =>
+              setActiveTab('heatmap')
+            }
           >
             <FaFire />
             Heatmap
@@ -82,11 +108,16 @@ const Sidebar = ({ activeTab, setActiveTab }) => {
 
       </div>
 
-      <button className="logout-btn">
+      <button
+        className="logout-btn"
+        onClick={() => {
 
-        <FaSignOutAlt />
-        Log Out
+          localStorage.removeItem('user')
 
+          window.location.href = '/'
+        }}
+      >
+        Logout
       </button>
 
     </div>

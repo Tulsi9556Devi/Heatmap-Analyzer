@@ -1,60 +1,150 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import DashboardLayout from '../components/layouts/DashboardLayout'
 import MapShell from '../components/MapShell'
+import { supabase } from '../services/supabase'
 
 const UserDashboard = () => {
+  
+  const [userData, setUserData] =
+  useState(null)
+
+  const navigate = useNavigate()
 
   const [activeTab, setActiveTab] = useState('dashboard')
 
-  const [previewImage, setPreviewImage] = useState(null)
+  const [previewImage, setPreviewImage] =
+    useState(null)
 
-  const [complaints, setComplaints] = useState([
-    {
-      id: 1,
-      type: 'Pothole',
-      area: 'Nerul Sector 5',
-      status: 'Pending',
-      image:
-        'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?q=80&w=400&auto=format&fit=crop'
-    },
-    {
-      id: 2,
-      type: 'Garbage',
-      area: 'Kharghar Sector 11',
-      status: 'Resolved',
-      image:
-        'https://images.unsplash.com/photo-1532996122724-e3c354a0b15b?q=80&w=400&auto=format&fit=crop'
-    }
-  ])
+  const [complaints, setComplaints] =
+    useState([])
+
+  const [userName, setUserName] =
+    useState('Citizen')
+
+  const [userLocation, setUserLocation] =
+    useState('Fetching location...')
 
   const [formData, setFormData] = useState({
     fullName: '',
     phone: '',
     complaintType: '',
     description: '',
-    autoLocation: ''
+    autoLocation: '',
+    latitude: null,
+    longitude: null,
+    date: new Date().toLocaleDateString()
   })
 
-  const detectLocation = () => {
+useEffect(() => {
+
+  fetchComplaints()
+
+  const storedUser =
+    JSON.parse(
+      localStorage.getItem('user')
+    )
+
+  if (storedUser) {
+
+    setUserData(storedUser)
+
+    setFormData((prev) => ({
+      ...prev,
+      fullName:
+        storedUser.full_name || ''
+    }))
+  }
+
+}, [])
+
+  const fetchComplaints = async () => {
+
+    const { data, error } =
+      await supabase
+        .from('complaints')
+        .select('*')
+        .order('id', { ascending: false })
+
+    if (error) {
+
+      console.log(error)
+      return
+    }
+
+    setComplaints(data)
+  }
+
+  const fetchUserLocation = () => {
 
     if (navigator.geolocation) {
 
       navigator.geolocation.getCurrentPosition(
-        (position) => {
 
-          const latitude = position.coords.latitude
-          const longitude = position.coords.longitude
+        async (position) => {
+
+          const latitude =
+            position.coords.latitude
+
+          const longitude =
+            position.coords.longitude
 
           setFormData((prev) => ({
             ...prev,
-            autoLocation: `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`
+            latitude,
+            longitude,
+            autoLocation:
+              `${latitude.toFixed(4)},
+               ${longitude.toFixed(4)}`
           }))
+
+          try {
+
+            const response =
+              await fetch(
+                `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`
+              )
+
+            const data =
+              await response.json()
+
+            const area =
+              data.address.suburb ||
+              data.address.city ||
+              data.address.town ||
+              data.address.village ||
+              'Unknown Area'
+
+            setUserLocation(area)
+
+          } catch {
+
+            setUserLocation(
+              'Location unavailable'
+            )
+          }
         },
+
         () => {
-          alert('Unable to fetch location')
+
+          setUserLocation(
+            'Location unavailable'
+          )
         }
       )
     }
+  }
+
+  const detectLocation = () => {
+
+    fetchUserLocation()
+  }
+
+  const handleLogout = () => {
+
+    localStorage.removeItem('loggedUser')
+
+    navigate('/')
   }
 
   const handleImageChange = (e) => {
@@ -62,7 +152,10 @@ const UserDashboard = () => {
     const file = e.target.files[0]
 
     if (file) {
-      setPreviewImage(URL.createObjectURL(file))
+
+      setPreviewImage(
+        URL.createObjectURL(file)
+      )
     }
   }
 
@@ -74,7 +167,7 @@ const UserDashboard = () => {
     })
   }
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
 
     e.preventDefault()
 
@@ -83,34 +176,116 @@ const UserDashboard = () => {
       !formData.phone ||
       !formData.complaintType ||
       !formData.description ||
-      !formData.autoLocation ||
+      !formData.latitude ||
       !previewImage
     ) {
+
       alert('Please fill all required fields')
       return
     }
 
-    const newComplaint = {
-      id: complaints.length + 1,
-      type: formData.complaintType,
-      area: formData.autoLocation,
-      status: 'Pending',
-      image: previewImage
+    try {
+
+      const fileInput =
+        document.querySelector(
+          'input[type="file"]'
+        )
+
+      const file =
+        fileInput.files[0]
+
+      const fileName =
+        `${Date.now()}-${file.name}`
+
+      const { error: uploadError } =
+        await supabase.storage
+          .from('complaint-images')
+          .upload(fileName, file)
+
+      if (uploadError) {
+
+        console.log(uploadError)
+
+        alert('Image upload failed')
+        return
+      }
+
+      const {
+        data: imageData
+      } = supabase.storage
+        .from('complaint-images')
+        .getPublicUrl(fileName)
+
+      const imageUrl =
+        imageData.publicUrl
+
+      const { error } =
+        await supabase
+          .from('complaints')
+          .insert([
+            {
+              full_name:
+                formData.fullName,
+
+              phone:
+                formData.phone,
+
+              complaint_type:
+                formData.complaintType,
+
+              description:
+                formData.description,
+
+              latitude:
+                formData.latitude,
+
+              longitude:
+                formData.longitude,
+
+              image_url:
+                imageUrl,
+
+              status:
+                'Pending',
+
+              date:
+                formData.date
+            }
+          ])
+
+      if (error) {
+
+        console.log(error)
+
+        alert('Database insert failed')
+        return
+      }
+
+      alert(
+        'Complaint Submitted Successfully'
+      )
+
+      fetchComplaints()
+
+      setFormData({
+        fullName: userName,
+        phone: '',
+        complaintType: '',
+        description: '',
+        autoLocation: '',
+        latitude: null,
+        longitude: null,
+        date: new Date().toLocaleDateString()
+      })
+
+      setPreviewImage(null)
+
+    } catch (err) {
+
+      console.log(err)
+
+      alert('Something went wrong')
     }
-
-    setComplaints([...complaints, newComplaint])
-
-    alert('Complaint Submitted Successfully')
-
-    setFormData({
-      fullName: '',
-      phone: '',
-      complaintType: '',
-      description: '',
-      autoLocation: ''
-    })
-
-    setPreviewImage(null)
   }
 
   const renderDashboard = () => {
@@ -140,16 +315,20 @@ const UserDashboard = () => {
               Nearby NGO
             </button>
 
-            <button className="top-btn">
-              Filter
+            <button
+              className="top-btn"
+              onClick={handleLogout}
+            >
+              Logout
             </button>
 
           </div>
 
         </div>
 
+
         <div className="map-section">
-<MapShell />
+          <MapShell />
         </div>
 
         <div className="bottom-panel">
@@ -176,15 +355,15 @@ const UserDashboard = () => {
           <div className="complaint-cards">
 
             <div className="complaint-card red-card">
-              Juinagar, Sector 10
+              Live Complaint Tracking
             </div>
 
             <div className="complaint-card green-card">
-              Nerul, Sector 5
+              Smart City Monitoring
             </div>
 
             <div className="complaint-card yellow-card">
-              Kharghar, Sector 11
+              Real Time Updates
             </div>
 
           </div>
@@ -195,194 +374,224 @@ const UserDashboard = () => {
     )
   }
 
-const renderComplaints = () => {
+  const renderComplaints = () => {
 
-  return (
+    return (
 
-    <div className="tab-page">
+      <div className="tab-page">
 
-      <div className="complaint-header">
+        <div className="complaint-header">
 
-        <h1 className="page-title">
-          Register Complaint
-        </h1>
+          <h1 className="page-title">
+            Register Complaint
+          </h1>
 
-        <p className="complaint-subtitle">
-          Report civic issues in your area quickly.
-        </p>
+          <p className="complaint-subtitle">
+            Report civic issues in your area quickly.
+          </p>
 
-      </div>
+        </div>
 
-      <div className="complaint-form-wrapper">
+        <div className="complaint-form-wrapper">
 
-        <form
-          className="complaint-form modern-form"
-          onSubmit={handleSubmit}
-        >
+          <form
+            className="complaint-form modern-form"
+            onSubmit={handleSubmit}
+          >
 
-          <div className="form-grid">
+            <div className="form-grid">
 
-            <div className="form-group">
+              <div className="form-group">
 
-              <label>
-                Full Name *
-              </label>
-
-              <input
-                type="text"
-                name="fullName"
-                placeholder="Enter Full Name"
-                value={formData.fullName}
-                onChange={handleChange}
-                required
-              />
-
-            </div>
-
-            <div className="form-group">
-
-              <label>
-                Phone Number *
-              </label>
-
-              <input
-                type="tel"
-                name="phone"
-                placeholder="Enter Phone Number"
-                value={formData.phone}
-                onChange={handleChange}
-                required
-              />
-
-            </div>
-
-            <div className="form-group">
-
-              <label>
-                Complaint Type *
-              </label>
-
-              <select
-                name="complaintType"
-                value={formData.complaintType}
-                onChange={handleChange}
-                required
-              >
-                <option value="">
-                  Select Complaint
-                </option>
-
-                <option>Pothole</option>
-                <option>Garbage</option>
-                <option>Drainage</option>
-                <option>Streetlight</option>
-
-              </select>
-
-            </div>
-
-            <div className="form-group">
-
-              <label>
-                Location *
-              </label>
-
-              <div className="location-row">
+                <label>
+                  Full Name *
+                </label>
 
                 <input
                   type="text"
-                  value={formData.autoLocation}
-                  readOnly
-                  placeholder="Auto detected location"
-                  className="location-input"
+                  name="fullName"
+                  placeholder="Enter Full Name"
+                  value={formData.fullName}
+                  onChange={handleChange}
                   required
                 />
 
-                <button
-                  type="button"
-                  className="location-btn"
-                  onClick={detectLocation}
-                >
-                  Detect
-                </button>
-
               </div>
 
-            </div>
+              <div className="form-group">
 
-          </div>
-
-          <div className="bottom-form-grid">
-
-            <div className="form-group description-group">
-
-              <label>
-                Description *
-              </label>
-
-              <textarea
-                name="description"
-                placeholder="Describe the issue in detail..."
-                value={formData.description}
-                onChange={handleChange}
-                required
-              ></textarea>
-
-            </div>
-
-            <div className="upload-section">
-
-              <label>
-                Upload Evidence *
-              </label>
-
-              <div className="upload-box">
+                <label>
+                  Phone Number *
+                </label>
 
                 <input
-                  type="file"
-                  accept="image/*"
-                  onChange={handleImageChange}
+                  type="tel"
+                  name="phone"
+                  placeholder="Enter 10 Digit Phone Number"
+                  value={formData.phone}
+                  onChange={(e) => {
+
+                    const value =
+                      e.target.value.replace(/\D/g, '')
+
+                    if (value.length <= 10) {
+
+                      setFormData({
+                        ...formData,
+                        phone: value
+                      })
+                    }
+                  }}
+                  pattern="[0-9]{10}"
+                  maxLength={10}
                   required
                 />
 
-                {
-                  previewImage ? (
+              </div>
 
-                    <img
-                      src={previewImage}
-                      alt="preview"
-                      className="preview-image"
-                    />
+              <div className="form-group">
 
-                  ) : (
+                <label>
+                  Complaint Type *
+                </label>
 
-                    <div className="empty-preview">
-                      Image Preview
-                    </div>
+                <select
+                  name="complaintType"
+                  value={formData.complaintType}
+                  onChange={handleChange}
+                  required
+                >
 
-                  )
-                }
+                  <option value="">
+                    Select Complaint
+                  </option>
+
+                  <option>Pothole</option>
+                  <option>Garbage</option>
+                  <option>Drainage</option>
+                  <option>Streetlight</option>
+
+                </select>
+
+              </div>
+
+              <div className="form-group">
+
+                <label>
+                  Date
+                </label>
+
+                <input
+                  type="text"
+                  value={formData.date}
+                  readOnly
+                  className="location-input"
+                />
+
+              </div>
+
+              <div className="form-group">
+
+                <label>
+                  Location *
+                </label>
+
+                <div className="location-row">
+
+                  <input
+                    type="text"
+                    value={formData.autoLocation}
+                    readOnly
+                    placeholder="Auto detected location"
+                    className="location-input"
+                    required
+                  />
+
+                  <button
+                    type="button"
+                    className="location-btn"
+                    onClick={detectLocation}
+                  >
+                    Detect
+                  </button>
+
+                </div>
 
               </div>
 
             </div>
 
-          </div>
+            <div className="bottom-form-grid">
 
-          <button
-            type="submit"
-            className="submit-btn large-submit-btn"
-          >
-            Submit Complaint
-          </button>
+              <div className="form-group description-group">
 
-        </form>
+                <label>
+                  Description *
+                </label>
+
+                <textarea
+                  name="description"
+                  placeholder="Describe the issue in detail..."
+                  value={formData.description}
+                  onChange={handleChange}
+                  required
+                ></textarea>
+
+              </div>
+
+              <div className="upload-section">
+
+                <label>
+                  Upload Evidence *
+                </label>
+
+                <div className="upload-box">
+
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleImageChange}
+                    required
+                  />
+
+                  {
+                    previewImage ? (
+
+                      <img
+                        src={previewImage}
+                        alt="preview"
+                        className="preview-image"
+                      />
+
+                    ) : (
+
+                      <div className="empty-preview">
+                        Image Preview
+                      </div>
+
+                    )
+                  }
+
+                </div>
+
+              </div>
+
+            </div>
+
+            <button
+              type="submit"
+              className="submit-btn large-submit-btn"
+            >
+              Submit Complaint
+            </button>
+
+          </form>
+
+        </div>
 
       </div>
-
-    </div>
-  )
-}
+    )
+  }
 
   const renderTrackComplaints = () => {
 
@@ -432,11 +641,15 @@ const renderComplaints = () => {
                     </td>
 
                     <td>
-                      {item.type}
+                      {item.complaint_type}
                     </td>
 
                     <td className="location-cell">
-                      {item.area}
+
+                      {item.latitude?.toFixed(4)},
+                      {' '}
+                      {item.longitude?.toFixed(4)}
+
                     </td>
 
                     <td>
@@ -445,10 +658,14 @@ const renderComplaints = () => {
                         className={`status-badge ${
                           item.status === 'Resolved'
                             ? 'resolved-badge'
+                            : item.status === 'In Progress'
+                            ? 'progress-badge'
                             : 'pending-badge'
                         }`}
                       >
-                        {item.status}
+
+                        {item.status || 'Pending'}
+
                       </span>
 
                     </td>
@@ -456,7 +673,7 @@ const renderComplaints = () => {
                     <td>
 
                       <img
-                        src={item.image}
+                        src={item.image_url}
                         alt="complaint"
                         className="table-image"
                       />
@@ -525,9 +742,10 @@ const renderComplaints = () => {
   return (
 
     <DashboardLayout
-      activeTab={activeTab}
-      setActiveTab={setActiveTab}
-    >
+  activeTab={activeTab}
+  setActiveTab={setActiveTab}
+  userData={userData}
+>
 
       {renderContent()}
 

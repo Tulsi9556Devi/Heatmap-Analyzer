@@ -1,40 +1,222 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
+import { supabase } from '../services/supabase'
+
 const Login = () => {
 
   const navigate = useNavigate()
 
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
+  const [isSignup, setIsSignup] =
+    useState(false)
 
-  const handleLogin = (e) => {
+  const [fullName, setFullName] =
+    useState('')
 
-    e.preventDefault()
+  const [email, setEmail] =
+    useState('')
 
-    // ADMIN LOGIN
+  const [password, setPassword] =
+    useState('')
+
+  // =========================
+  // LOGIN
+  // =========================
+
+  const handleLogin = async () => {
+
+    const cleanEmail =
+      email.trim().toLowerCase()
+
+    const cleanPassword =
+      password.trim()
+
+    try {
+
+      // =========================
+      // ADMIN LOGIN
+      // =========================
+
+      const {
+        data: adminData
+      } = await supabase
+        .from('admin')
+        .select('*')
+        .eq('email', cleanEmail)
+
+      if (
+        adminData &&
+        adminData.length > 0
+      ) {
+
+        const admin = adminData[0]
+
+        if (
+          admin.password === cleanPassword
+        ) {
+
+          localStorage.setItem(
+            'user',
+            JSON.stringify(admin)
+          )
+
+          navigate('/admin-dashboard')
+
+          return
+        }
+      }
+
+      // =========================
+      // DEPARTMENT LOGIN
+      // =========================
+
+      const {
+        data: departmentData,
+        error: departmentError
+      } = await supabase
+        .from('departments')
+        .select('*')
+        .eq('email', cleanEmail)
+
+      console.log(
+        'Department Data:',
+        departmentData
+      )
+
+      console.log(
+        'Department Error:',
+        departmentError
+      )
+
+      if (
+        departmentData &&
+        departmentData.length > 0
+      ) {
+
+        const department =
+          departmentData[0]
+
+        if (
+          department.password === cleanPassword
+        ) {
+
+          localStorage.setItem(
+            'user',
+            JSON.stringify(department)
+          )
+
+          navigate('/department-dashboard')
+
+          return
+        }
+      }
+
+      // =========================
+      // USER LOGIN
+      // =========================
+
+      const {
+        data: userData
+      } = await supabase
+        .from('users')
+        .select('*')
+        .eq('email', cleanEmail)
+
+      if (
+        userData &&
+        userData.length > 0
+      ) {
+
+        const user = userData[0]
+
+        if (
+          user.password === cleanPassword
+        ) {
+
+          localStorage.setItem(
+            'user',
+            JSON.stringify(user)
+          )
+
+          navigate('/user-dashboard')
+
+          return
+        }
+      }
+
+      alert('Invalid Credentials')
+
+    } catch (err) {
+
+      console.log(err)
+
+      alert('Login Failed')
+    }
+  }
+
+  // =========================
+  // SIGNUP
+  // =========================
+
+  const handleSignup = async () => {
 
     if (
-      email === 'admin@gmail.com' &&
-      password === 'admin123'
+      !fullName ||
+      !email ||
+      !password
     ) {
 
-      navigate('/admin-dashboard')
+      alert('Please fill all fields')
       return
     }
 
-    // USER LOGIN
+    const {
+      data: existingUser
+    } = await supabase
+      .from('users')
+      .select('*')
+      .eq(
+        'email',
+        email.trim().toLowerCase()
+      )
 
     if (
-      email === 'user@gmail.com' &&
-      password === '123456'
+      existingUser &&
+      existingUser.length > 0
     ) {
 
-      navigate('/user-dashboard')
+      alert('User already exists')
       return
     }
 
-    alert('Invalid Credentials')
+    const { error } =
+      await supabase
+        .from('users')
+        .insert([
+          {
+            full_name: fullName,
+            email: email.trim().toLowerCase(),
+            password: password.trim(),
+            role: 'user'
+          }
+        ])
+
+    if (error) {
+
+      console.log(error)
+
+      alert('Signup failed')
+
+      return
+    }
+
+    alert('Signup Successful')
+
+    setIsSignup(false)
+
+    setFullName('')
+    setEmail('')
+    setPassword('')
   }
 
   return (
@@ -57,55 +239,68 @@ const Login = () => {
 
           </div>
 
-          <div className="demo-credentials">
-
-            <h3>
-              Demo Credentials
-            </h3>
-
-            <div className="credential-box">
-
-              <h4>
-                Admin
-              </h4>
-
-              <p>
-                admin@gmail.com
-              </p>
-
-              <p>
-                admin123
-              </p>
-
-            </div>
-
-            <div className="credential-box">
-
-              <h4>
-                Citizen User
-              </h4>
-
-              <p>
-                user@gmail.com
-              </p>
-
-              <p>
-                123456
-              </p>
-
-            </div>
-
-          </div>
-
         </div>
 
         <div className="login-right">
 
-          <h2>
-            Login
-          </h2>
+          <div className="auth-toggle-header">
 
-          <form onSubmit={handleLogin}>
+            <button
+              type="button"
+              className={
+                !isSignup
+                ? 'auth-tab active-auth-tab'
+                : 'auth-tab'
+              }
+              onClick={() =>
+                setIsSignup(false)
+              }
+            >
+              Login
+            </button>
+
+            <button
+              type="button"
+              className={
+                isSignup
+                ? 'auth-tab active-auth-tab'
+                : 'auth-tab'
+              }
+              onClick={() =>
+                setIsSignup(true)
+              }
+            >
+              Sign Up
+            </button>
+
+          </div>
+
+          <form>
+
+            {
+              isSignup && (
+
+                <div className="login-group">
+
+                  <label>
+                    Full Name
+                  </label>
+
+                  <input
+                    type="text"
+                    placeholder="Enter Full Name"
+                    value={fullName}
+                    onChange={(e) =>
+                      setFullName(
+                        e.target.value
+                      )
+                    }
+                    required
+                  />
+
+                </div>
+              )
+            }
 
             <div className="login-group">
 
@@ -118,7 +313,9 @@ const Login = () => {
                 placeholder="Enter email"
                 value={email}
                 onChange={(e) =>
-                  setEmail(e.target.value)
+                  setEmail(
+                    e.target.value
+                  )
                 }
                 required
               />
@@ -136,7 +333,9 @@ const Login = () => {
                 placeholder="Enter password"
                 value={password}
                 onChange={(e) =>
-                  setPassword(e.target.value)
+                  setPassword(
+                    e.target.value
+                  )
                 }
                 required
               />
@@ -144,10 +343,21 @@ const Login = () => {
             </div>
 
             <button
-              type="submit"
+              type="button"
               className="login-btn"
+              onClick={
+                isSignup
+                ? handleSignup
+                : handleLogin
+              }
             >
-              Login
+
+              {
+                isSignup
+                ? 'Sign Up'
+                : 'Login'
+              }
+
             </button>
 
           </form>

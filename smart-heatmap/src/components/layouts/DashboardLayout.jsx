@@ -3,7 +3,8 @@ import Sidebar from '../map/Sidebar'
 const DashboardLayout = ({
   children,
   activeTab,
-  setActiveTab
+  setActiveTab,
+  userData
 }) => {
 
   return (
@@ -13,6 +14,7 @@ const DashboardLayout = ({
       <Sidebar
         activeTab={activeTab}
         setActiveTab={setActiveTab}
+        userData={userData}
       />
 
       <div className="dashboard-main">
