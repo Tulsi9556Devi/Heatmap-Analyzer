@@ -33,7 +33,7 @@ const AppRoutes = () => {
           element={<AdminDashboard />}
         />
 
- <Route
+        <Route
           path="/department-dashboard"
           element={<DepartmentDashboard/>}
         />

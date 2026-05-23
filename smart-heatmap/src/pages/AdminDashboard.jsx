@@ -6,67 +6,326 @@ import { supabase } from '../services/supabase'
 
 const AdminDashboard = () => {
 
-  const [activeTab, setActiveTab] = useState('dashboard')
+  const [activeTab, setActiveTab] =
+    useState('dashboard')
 
-const [complaints, setComplaints] =
-  useState([])
+  const [complaints, setComplaints] =
+    useState([])
+
+  const [temperature, setTemperature] =
+    useState('--')
+
+  const [weatherType, setWeatherType] =
+    useState('Loading...')
+
+  // =========================
+  // FETCH DATA
+  // =========================
+
   useEffect(() => {
 
-  fetchComplaints()
+    fetchComplaints()
 
-}, [])
+    const complaintsChannel =
+      supabase
+        .channel('admin-complaints-realtime')
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'complaints'
+          },
+          () => {
+            fetchComplaints()
+          }
+        )
+        .subscribe()
 
-const fetchComplaints = async () => {
+    // =========================
+    // WEATHER API
+    // =========================
 
-  const { data, error } =
-    await supabase
-      .from('complaints')
-      .select('*')
-      .order('id', { ascending: false })
+    if (navigator.geolocation) {
 
-  if (error) {
+      navigator.geolocation.getCurrentPosition(
 
-    console.log(error)
-    return
+        async (position) => {
+
+          const latitude =
+            position.coords.latitude
+
+          const longitude =
+            position.coords.longitude
+
+          try {
+
+            const weatherResponse =
+              await fetch(
+                `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current_weather=true`
+              )
+
+            const weatherData =
+              await weatherResponse.json()
+
+            setTemperature(
+              weatherData.current_weather.temperature
+            )
+
+            const weatherCode =
+              weatherData.current_weather.weathercode
+
+            if (weatherCode === 0) {
+
+              setWeatherType('Clear')
+            }
+
+            else if (
+              weatherCode >= 1 &&
+              weatherCode <= 3
+            ) {
+
+              setWeatherType('Cloudy')
+            }
+
+            else if (
+              weatherCode >= 51 &&
+              weatherCode <= 67
+            ) {
+
+              setWeatherType('Rain')
+            }
+
+            else {
+
+              setWeatherType('Weather')
+            }
+
+          }
+
+          catch (err) {
+
+            console.log(err)
+          }
+        }
+      )
+    }
+
+    return () => {
+      supabase.removeChannel(complaintsChannel)
+    }
+
+  }, [])
+
+  // =========================
+  // FETCH COMPLAINTS
+  // =========================
+
+  const fetchComplaints = async () => {
+
+    const { data, error } =
+      await supabase
+        .from('complaints')
+        .select('*')
+        .order('id', { ascending: false })
+
+    if (error) {
+
+      console.log(error)
+      return
+    }
+
+    setComplaints(data)
   }
 
-  setComplaints(data)
-}
-const updateStatus = async (id, value) => {
+  // =========================
+  // UPDATE STATUS
+  // =========================
 
-  let progressValue = 0
+  const updateStatus = async (
+    id,
+    value
+  ) => {
 
-  if (value === 'Pending') {
-    progressValue = 25
+    let progressValue = 0
+
+    if (value === 'Pending') {
+      progressValue = 25
+    }
+
+    if (
+      value === 'Reached to Department' ||
+      value === 'In Progress'
+    ) {
+      progressValue = 65
+    }
+
+    if (value === 'Resolved') {
+      progressValue = 100
+    }
+
+    setComplaints((prev) =>
+      prev.map((item) =>
+        item.id === id
+          ? {
+              ...item,
+              status: value,
+              progress: progressValue
+            }
+          : item
+      )
+    )
+
+    const {
+      data,
+      error
+    } =
+      await supabase
+        .from('complaints')
+        .update({
+          status: value,
+          progress: progressValue
+        })
+        .eq('id', id)
+        .select()
+
+    if (error) {
+
+      console.log('STATUS UPDATE ERROR:', error)
+      alert(`Status update failed: ${error.message}`)
+      fetchComplaints()
+      return
+    }
+
+    if (!data || data.length === 0) {
+
+      console.log(
+        'STATUS UPDATE RETURNED NO ROWS',
+        { id, value, progressValue }
+      )
+      alert(
+        'Status update failed: Supabase did not update this complaint. Check update/RLS policy for complaints table.'
+      )
+      fetchComplaints()
+      return
+    }
+
+    setComplaints((prev) =>
+      prev.map((item) =>
+        item.id === id
+          ? data[0]
+          : item
+      )
+    )
   }
 
-  if (value === 'In Progress') {
-    progressValue = 65
+  const approveComplaint = (id) => {
+    updateStatus(id, 'In Progress')
   }
 
-  if (value === 'Resolved') {
-    progressValue = 100
+  const getDepartmentName = (type) => {
+
+    const complaintType =
+      String(type || '').toLowerCase()
+
+    if (
+      complaintType.includes('garbage') ||
+      complaintType.includes('drainage')
+    ) {
+      return 'Cleaning'
+    }
+
+    if (
+      complaintType.includes('pothole') ||
+      complaintType.includes('road')
+    ) {
+      return 'Roads'
+    }
+
+    if (complaintType.includes('streetlight')) {
+      return 'Electric'
+    }
+
+    return 'Civic'
   }
 
-  const { error } =
-    await supabase
-      .from('complaints')
-      .update({
-        status: value,
-        progress: progressValue
-      })
-      .eq('id', id)
+  const getProgressValue = (item) => {
 
-  if (error) {
+    if (item.status === 'Resolved') {
+      return 100
+    }
 
-    console.log(error)
-    return
+    if (
+      item.status === 'Reached to Department' ||
+      item.status === 'In Progress'
+    ) {
+      return 65
+    }
+
+    if (
+      !item.status ||
+      item.status === 'Pending'
+    ) {
+      return 25
+    }
+
+    if (Number.isFinite(Number(item.progress))) {
+      return Number(item.progress)
+    }
+
+    return 25
   }
 
-  fetchComplaints()
-}
+  const getProgressText = (item) => {
 
-  const totalComplaints = complaints.length
+    if (item.status === 'Resolved') {
+      return 'Completed by department'
+    }
+
+    if (
+      item.status === 'Reached to Department' ||
+      item.status === 'In Progress'
+    ) {
+      return `Reached to ${getDepartmentName(item.complaint_type)}`
+    }
+
+    return 'Registered, waiting for admin approval'
+  }
+
+  const getStatusClass = (status) => {
+
+    if (status === 'Resolved') {
+      return 'resolved-badge'
+    }
+
+    if (
+      status === 'Reached to Department' ||
+      status === 'In Progress'
+    ) {
+      return 'progress-badge'
+    }
+
+    return 'pending-badge'
+  }
+
+  const getDisplayStatus = (status) => {
+
+    if (
+      status === 'In Progress' ||
+      status === 'Reached to Department'
+    ) {
+      return 'Reached to Department'
+    }
+
+    return status || 'Pending'
+  }
+
+  // =========================
+  // COUNTS
+  // =========================
+
+  const totalComplaints =
+    complaints.length
 
   const pendingCount =
     complaints.filter(
@@ -80,16 +339,58 @@ const updateStatus = async (id, value) => {
 
   const progressCount =
     complaints.filter(
-      item => item.status === 'In Progress'
+      item =>
+        item.status === 'Reached to Department' ||
+        item.status === 'In Progress'
     ).length
+
+  const complaintsWithLocation =
+    complaints.filter(
+      item =>
+        Number.isFinite(Number(item.latitude)) &&
+        Number.isFinite(Number(item.longitude))
+    ).length
+
+  const mostCommonIssue =
+    complaints.length
+      ? Object.entries(
+          complaints.reduce((acc, item) => {
+
+            const issue =
+              item.complaint_type || 'Unknown'
+
+            acc[issue] =
+              (acc[issue] || 0) + 1
+
+            return acc
+
+          }, {})
+        ).sort((a, b) => b[1] - a[1])[0][0]
+      : 'No complaints'
+
+  const resolutionRate =
+    complaints.length
+      ? Math.round(
+          (
+            resolvedCount /
+            complaints.length
+          ) * 100
+        )
+      : 0
+
+  // =========================
+  // DASHBOARD
+  // =========================
 
   const renderDashboard = () => {
 
     return (
 
-      <div className="tab-page">
+      <>
 
-        <div className="admin-header">
+        {/* HEADER */}
+
+        <div className="admin-dashboard-top">
 
           <div>
 
@@ -103,7 +404,33 @@ const updateStatus = async (id, value) => {
 
           </div>
 
+          <div className="top-buttons">
+
+            <button className="top-btn">
+
+              🌤️ {temperature}°C • {weatherType}
+
+            </button>
+
+            <button className="top-btn">
+
+              Smart Monitoring
+
+            </button>
+
+          </div>
+
         </div>
+
+        {/* MAP */}
+
+        <div className="admin-map-wrapper">
+
+          <MapShell />
+
+        </div>
+
+        {/* STATS */}
 
         <div className="admin-stats-grid">
 
@@ -138,7 +465,7 @@ const updateStatus = async (id, value) => {
             </h2>
 
             <p>
-              In Progress
+              At Department
             </p>
 
           </div>
@@ -157,9 +484,147 @@ const updateStatus = async (id, value) => {
 
         </div>
 
-        <div className="admin-map-wrapper">
+      </>
+    )
+  }
 
-          <MapShell />
+  // =========================
+  // MANAGE COMPLAINTS
+  // =========================
+
+  const renderManageComplaints = () => {
+
+    return (
+
+      <div className="tab-page">
+
+        <div className="track-header">
+
+          <h1 className="page-title">
+            Manage Complaints
+          </h1>
+
+          <div className="track-count">
+            Total : {complaints.length}
+          </div>
+
+        </div>
+
+        <div className="complaint-progress-list">
+
+          {
+            complaints.map((item) => (
+
+              <div
+                key={item.id}
+                className="progress-card-box"
+              >
+
+                <div className="progress-top">
+
+                  <div>
+
+                    <h2>
+                      {item.complaint_type}
+                    </h2>
+
+                    <p>
+                      {item.full_name}
+                    </p>
+
+                  </div>
+
+                  <span
+                    className={`status-badge
+                    ${getStatusClass(item.status)}`}
+                  >
+
+                    {getDisplayStatus(item.status)}
+
+                  </span>
+
+                </div>
+
+                <div className="progress-location">
+
+                  📍
+
+                  {
+                    item.latitude &&
+                    item.longitude
+                    ? `${item.latitude.toFixed(4)},
+                       ${item.longitude.toFixed(4)}`
+                    : 'N/A'
+                  }
+
+                </div>
+
+                <div className="department-line">
+                  Department : {getDepartmentName(item.complaint_type)}
+                </div>
+
+                <div className="progress-bar-wrapper">
+
+                  <div
+                    className="progress-bar-fill"
+                    style={{
+                      width: `${getProgressValue(item)}%`
+                    }}
+                  ></div>
+
+                </div>
+
+                <div className="progress-bottom">
+
+                  <span>
+
+                    Progress : {getProgressValue(item)}% - {getProgressText(item)}
+
+                  </span>
+
+                  {
+                    item.status === 'Resolved'
+                    ? (
+                      <button
+                        type="button"
+                        className="workflow-action-btn completed-action"
+                        disabled
+                      >
+                        Completed
+                      </button>
+                    )
+                    : (
+                      item.status === 'Reached to Department' ||
+                      item.status === 'In Progress'
+                    )
+                    ? (
+                      <button
+                        type="button"
+                        className="workflow-action-btn forwarded-action"
+                        disabled
+                      >
+                        Forwarded
+                      </button>
+                    )
+                    : (
+                      <button
+                        type="button"
+                        className="workflow-action-btn"
+                        onClick={() =>
+                          approveComplaint(item.id)
+                        }
+                      >
+                        Approve
+                      </button>
+                    )
+                  }
+
+                </div>
+
+              </div>
+
+            ))
+          }
 
         </div>
 
@@ -167,209 +632,78 @@ const updateStatus = async (id, value) => {
     )
   }
 
-  const renderManageComplaints = () => {
+  // =========================
+  // HEATMAP
+  // =========================
 
-  return (
+  const renderAnalytics = () => {
 
-    <div className="tab-page">
+    return (
 
-      <div className="track-header">
+      <div className="tab-page">
 
         <h1 className="page-title">
-          Manage Complaints
+          Heatmap Analytics
         </h1>
 
-        <div className="track-count">
-          Total : {complaints.length}
-        </div>
+        <div className="admin-map-wrapper">
 
-      </div>
-
-      <div className="complaint-progress-list">
-
-        {
-          complaints.map((item) => (
-
-            <div
-              key={item.id}
-              className="progress-card-box"
-            >
-
-              <div className="progress-top">
-
-                <div>
-
-                  <h2>
-                    {item.complaint_type}
-                  </h2>
-
-                  <p>
-                    {item.full_name}
-                  </p>
-
-                </div>
-
-                <span
-                  className={`status-badge
-                  ${
-                    item.status === 'Resolved'
-                    ? 'resolved-badge'
-                    : item.status === 'In Progress'
-                    ? 'progress-badge'
-                    : 'pending-badge'
-                  }`}
-                >
-
-                  {item.status || 'Pending'}
-
-                </span>
-
-              </div>
-
-              <div className="progress-location">
-
-                📍
-                {
-                  item.latitude &&
-                  item.longitude
-                  ? `${item.latitude.toFixed(4)},
-                     ${item.longitude.toFixed(4)}`
-                  : 'N/A'
-                }
-
-              </div>
-
-              <div className="progress-bar-wrapper">
-
-                <div
-                  className="progress-bar-fill"
-                  style={{
-                   width:
-                item.status === 'Resolved'
-                 ? '100%'
-                   : item.status === 'In Progress'
-                  ? '60%'
-                     : '25%'
-                  }}
-                ></div>
-
-              </div>
-
-              <div className="progress-bottom">
-
-                <span>
-                 Progress :
-                      {
-                    item.status === 'Resolved'
-                    ? '100'
-                    : item.status === 'In Progress'
-                    ? '60'
-                    : '25'
-                }%
-                </span>
-
-                <select
-                  className="admin-action-select"
-                  value={item.status || 'Pending'}
-                  onChange={(e) =>
-                    updateStatus(
-                      item.id,
-                      e.target.value
-                    )
-                  }
-                >
-
-                  <option>
-                    Pending
-                  </option>
-
-                  <option>
-                    In Progress
-                  </option>
-
-                  <option>
-                    Resolved
-                  </option>
-
-                </select>
-
-              </div>
-
-            </div>
-
-          ))
-        }
-
-      </div>
-
-    </div>
-  )
-}
-const renderAnalytics = () => {
-
-  return (
-
-    <div className="tab-page">
-
-      <h1 className="page-title">
-        Heatmap Analytics
-      </h1>
-
-      <div className="admin-map-wrapper">
-
-        <HeatMapShell />
-
-      </div>
-
-      <div className="analytics-grid">
-
-        <div className="analytics-card">
-
-          <h2>
-            Total Complaints
-          </h2>
-
-          <p>
-            {complaints.length}
-          </p>
+          <HeatMapShell complaints={complaints} />
 
         </div>
 
-        <div className="analytics-card">
+        <div className="analytics-grid">
 
-          <h2>
-            Most Common Issue
-          </h2>
+          <div className="analytics-card">
 
-          <p>
-            Potholes
-          </p>
+            <h2>
+              Mapped Complaints
+            </h2>
 
-        </div>
+            <p>
+              {complaintsWithLocation}
+            </p>
 
-        <div className="analytics-card">
+          </div>
 
-          <h2>
-            Resolution Rate
-          </h2>
+          <div className="analytics-card">
 
-          <p>
-            {
-              complaints.length
-              ? Math.floor(
-                  (resolvedCount / complaints.length) * 100
-                )
-              : 0
-            }%
-          </p>
+            <h2>
+              Most Common Issue
+            </h2>
+
+            <p>
+              {mostCommonIssue}
+            </p>
+
+          </div>
+
+          <div className="analytics-card">
+
+            <h2>
+              Resolution Rate
+            </h2>
+
+            <p>
+
+              {
+                resolutionRate
+              }%
+
+            </p>
+
+          </div>
 
         </div>
 
       </div>
+    )
+  }
 
-    </div>
-  )
-}
+  // =========================
+  // CONTENT SWITCH
+  // =========================
+
   const renderContent = () => {
 
     if (activeTab === 'complaints') {

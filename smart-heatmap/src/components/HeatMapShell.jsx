@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo } from 'react'
 
 import {
   MapContainer,
-  TileLayer
+  TileLayer,
+  useMap
 } from 'react-leaflet'
 
 import 'leaflet/dist/leaflet.css'
@@ -10,80 +11,24 @@ import 'leaflet.heat/dist/leaflet-heat.js'
 
 import L from 'leaflet'
 
-import { supabase } from '../services/supabase'
-// console.log(L.heatLayer)
+const HeatLayer = ({ points }) => {
 
-const HeatMapShell = () => {
-
-  const [points, setPoints] = useState([])
+  const map = useMap()
 
   useEffect(() => {
 
-    fetchComplaints()
+    map.invalidateSize()
 
-  }, [])
-
-  const fetchComplaints = async () => {
-
-    const { data, error } =
-      await supabase
-        .from('complaints')
-        .select('*')
-
-    if (error) {
-      console.log(error)
+    if (!points.length || !L.heatLayer) {
       return
     }
 
-    const heatPoints =
-      data
-        .filter(
-          item =>
-            item.latitude &&
-            item.longitude
-        )
-        .map(item => ([
-          item.latitude,
-          item.longitude,
-          1
-        ]))
-
-    setPoints(heatPoints)
-  }
-useEffect(() => {
-
-  if (!points.length) return
-
-  const timer = setTimeout(() => {
-
-    try {
-
-      const container =
-        document.querySelector(
-          '.leaflet-container'
-        )
-
-      if (
-        !container ||
-        !container._leaflet_map
-      ) {
-        return
-      }
-
-      const map =
-        container._leaflet_map
-
-      if (!L.heatLayer) {
-        console.log(
-          'HeatLayer not loaded'
-        )
-        return
-      }
-
+    const heatLayer =
       L.heatLayer(points, {
-        radius: 35,
-        blur: 25,
+        radius: 38,
+        blur: 28,
         maxZoom: 17,
+        minOpacity: 0.35,
         gradient: {
           0.2: '#2b83ff',
           0.4: '#00d4ff',
@@ -93,19 +38,56 @@ useEffect(() => {
         }
       }).addTo(map)
 
-    } catch (err) {
-
-      console.log(
-        'Heatmap Error:',
-        err
+    const bounds =
+      L.latLngBounds(
+        points.map(point => [
+          point[0],
+          point[1]
+        ])
       )
+
+    if (bounds.isValid()) {
+
+      if (points.length === 1) {
+        map.setView(
+          [points[0][0], points[0][1]],
+          14
+        )
+      } else {
+        map.fitBounds(bounds, {
+          padding: [70, 70],
+          maxZoom: 14
+        })
+      }
     }
 
-  }, 1000)
+    return () => {
+      map.removeLayer(heatLayer)
+    }
 
-  return () => clearTimeout(timer)
+  }, [map, points])
 
-}, [points])
+  return null
+}
+
+const HeatMapShell = ({ complaints = [] }) => {
+
+  const points =
+    useMemo(() => {
+
+      return complaints
+        .filter(
+          item =>
+            Number.isFinite(Number(item.latitude)) &&
+            Number.isFinite(Number(item.longitude))
+        )
+        .map(item => ([
+          Number(item.latitude),
+          Number(item.longitude),
+          1
+        ]))
+
+    }, [complaints])
 
   return (
 
@@ -124,6 +106,8 @@ useEffect(() => {
         attribution="&copy; OpenStreetMap contributors"
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
       />
+
+      <HeatLayer points={points} />
 
     </MapContainer>
   )

@@ -1,11 +1,25 @@
-import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet'
+import {
+  MapContainer,
+  TileLayer,
+  Marker,
+  Popup
+} from 'react-leaflet'
+
+import {
+  useEffect,
+  useState
+} from 'react'
+
 import 'leaflet/dist/leaflet.css'
 
 import L from 'leaflet'
 
+import { supabase } from '../services/supabase'
+
 delete L.Icon.Default.prototype._getIconUrl
 
 L.Icon.Default.mergeOptions({
+
   iconRetinaUrl:
     'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
 
@@ -18,25 +32,30 @@ L.Icon.Default.mergeOptions({
 
 const MapShell = () => {
 
-  const complaints = [
-    {
-      id: 1,
-      title: 'Pothole Issue',
-      position: [19.0330, 73.0297]
-    },
+  const [complaints, setComplaints] =
+    useState([])
 
-    {
-      id: 2,
-      title: 'Garbage Dump',
-      position: [19.0600, 73.0000]
-    },
+  useEffect(() => {
 
-    {
-      id: 3,
-      title: 'Drainage Overflow',
-      position: [19.0178, 73.0165]
+    fetchComplaints()
+
+  }, [])
+
+  const fetchComplaints = async () => {
+
+    const { data, error } =
+      await supabase
+        .from('complaints')
+        .select('*')
+
+    if (error) {
+
+      console.log(error)
+      return
     }
-  ]
+
+    setComplaints(data)
+  }
 
   return (
 
@@ -55,20 +74,50 @@ const MapShell = () => {
         />
 
         {
-          complaints.map((item) => (
+          complaints.map((item) => {
 
-            <Marker
-              key={item.id}
-              position={item.position}
-            >
+            if (
+              !item.latitude ||
+              !item.longitude
+            ) {
+              return null
+            }
 
-              <Popup>
-                {item.title}
-              </Popup>
+            return (
 
-            </Marker>
+              <Marker
+                key={item.id}
+                position={[
+                  item.latitude,
+                  item.longitude
+                ]}
+              >
 
-          ))
+                <Popup>
+
+                  <div>
+
+                    <h3>
+                      {item.complaint_type}
+                    </h3>
+
+                    <p>
+                      {item.description}
+                    </p>
+
+                    <p>
+                      Status:
+                      {' '}
+                      {item.status}
+                    </p>
+
+                  </div>
+
+                </Popup>
+
+              </Marker>
+            )
+          })
         }
 
       </MapContainer>

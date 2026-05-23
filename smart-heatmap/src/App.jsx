@@ -35,13 +35,9 @@ function App() {
         />
 
         <Route
-  path="/department-dashboard"
-  element={
-    <h1>
-      Department Route Working ✅
-    </h1>
-  }
-/>
+          path="/department-dashboard"
+          element={<DepartmentDashboard />}
+        />
 
       </Routes>
 

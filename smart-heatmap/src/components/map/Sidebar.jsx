@@ -13,8 +13,38 @@ const Sidebar = ({
 
   const displayName =
     userData?.full_name ||
+    userData?.name ||
     userData?.dept_name ||
     'Citizen'
+
+  const isDepartment =
+    userData?.role === 'department' ||
+    Boolean(userData?.dept_name)
+
+  // =========================
+  // PROFILE IMAGE BY ROLE
+  // =========================
+
+  let profileImage =
+    'https://i.pravatar.cc/150?img=12'
+
+if (userData?.role === 'admin') {
+
+  profileImage =
+    'https://i.pravatar.cc/150?img=68'
+}
+
+else if (isDepartment) {
+
+  profileImage =
+    'https://i.pravatar.cc/150?img=12'
+}
+
+else {
+
+  profileImage =
+    'https://i.pravatar.cc/150?img=32'
+}
 
   return (
 
@@ -25,10 +55,7 @@ const Sidebar = ({
         <div className="profile-section">
 
           <img
-            src={
-              userData?.profile_image ||
-              'https://i.pravatar.cc/150?img=12'
-            }
+            src={profileImage}
             alt="profile"
             className="profile-image"
           />
@@ -76,33 +103,39 @@ const Sidebar = ({
             Complaints
           </button>
 
-          <button
-            className={`menu-btn ${
-              activeTab === 'track'
-                ? 'active-btn'
-                : ''
-            }`}
-            onClick={() =>
-              setActiveTab('track')
-            }
-          >
-            <FaMapMarkedAlt />
-            Track Complaint
-          </button>
+          {
+            !isDepartment && (
+              <>
+                <button
+                  className={`menu-btn ${
+                    activeTab === 'track'
+                      ? 'active-btn'
+                      : ''
+                  }`}
+                  onClick={() =>
+                    setActiveTab('track')
+                  }
+                >
+                  <FaMapMarkedAlt />
+                  Track Complaint
+                </button>
 
-          <button
-            className={`menu-btn ${
-              activeTab === 'heatmap'
-                ? 'active-btn'
-                : ''
-            }`}
-            onClick={() =>
-              setActiveTab('heatmap')
-            }
-          >
-            <FaFire />
-            Heatmap
-          </button>
+                <button
+                  className={`menu-btn ${
+                    activeTab === 'heatmap'
+                      ? 'active-btn'
+                      : ''
+                  }`}
+                  onClick={() =>
+                    setActiveTab('heatmap')
+                  }
+                >
+                  <FaFire />
+                  Heatmap
+                </button>
+              </>
+            )
+          }
 
         </div>
 
