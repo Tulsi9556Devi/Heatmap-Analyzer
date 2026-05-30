@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
 import DashboardLayout from '../components/layouts/DashboardLayout'
 import MapShell from '../components/MapShell'
 import { supabase } from '../services/supabase'
@@ -9,8 +8,6 @@ const UserDashboard = () => {
   const [userData, setUserData] =
   useState(null)
 
-  const navigate = useNavigate()
-
   const [activeTab, setActiveTab] = useState('dashboard')
 
   const [previewImage, setPreviewImage] =
@@ -19,8 +16,8 @@ const UserDashboard = () => {
   const [complaints, setComplaints] =
     useState([])
 
-  const [userName, setUserName] =
-    useState('Citizen')
+  const [complaintSearch, setComplaintSearch] =
+    useState('')
 
   const [userLocation, setUserLocation] =
     useState('Fetching location...')
@@ -43,8 +40,6 @@ const [weatherType, setWeatherType] =
 
 useEffect(() => {
 
-  fetchComplaints()
-
   const storedUser =
     JSON.parse(
       localStorage.getItem('user')
@@ -53,12 +48,15 @@ useEffect(() => {
   if (storedUser) {
 
     setUserData(storedUser)
+    fetchComplaints(storedUser)
 
     setFormData((prev) => ({
       ...prev,
       fullName:
         storedUser.full_name || ''
     }))
+  } else {
+    fetchComplaints(null)
   }
 
   const complaintsChannel =
@@ -72,7 +70,7 @@ useEffect(() => {
           table: 'complaints'
         },
         () => {
-          fetchComplaints()
+          fetchComplaints(storedUser)
         }
       )
       .subscribe()
@@ -182,7 +180,70 @@ useEffect(() => {
 
 }, [])
 
-  const fetchComplaints = async () => {
+  const getVisibleComplaints = (
+    data,
+    currentUser
+  ) => {
+
+    if (!currentUser) {
+      return []
+    }
+
+    const currentUserId =
+      currentUser.id
+        ? String(currentUser.id)
+        : ''
+
+    const currentUserEmail =
+      String(currentUser.email || '').toLowerCase()
+
+    const currentUserName =
+      String(currentUser.full_name || currentUser.name || '').toLowerCase()
+
+    return data.filter((item) => {
+
+      const complaintUserId =
+        item.user_id ||
+        item.userId ||
+        item.created_by
+
+      if (
+        currentUserId &&
+        complaintUserId &&
+        String(complaintUserId) === currentUserId
+      ) {
+        return true
+      }
+
+      const complaintEmail =
+        String(
+          item.user_email ||
+          item.email ||
+          ''
+        ).toLowerCase()
+
+      if (
+        currentUserEmail &&
+        complaintEmail &&
+        complaintEmail === currentUserEmail
+      ) {
+        return true
+      }
+
+      const complaintName =
+        String(item.full_name || '').toLowerCase()
+
+      return Boolean(
+        currentUserName &&
+        complaintName &&
+        complaintName === currentUserName
+      )
+    })
+  }
+
+  const fetchComplaints = async (
+    currentUser = userData
+  ) => {
 
     const { data, error } =
       await supabase
@@ -196,7 +257,12 @@ useEffect(() => {
       return
     }
 
-    setComplaints(data)
+    setComplaints(
+      getVisibleComplaints(
+        data || [],
+        currentUser
+      )
+    )
   }
 
   const fetchUserLocation = () => {
@@ -213,15 +279,6 @@ useEffect(() => {
           const longitude =
             position.coords.longitude
 
-          setFormData((prev) => ({
-            ...prev,
-            latitude,
-            longitude,
-            autoLocation:
-              `${latitude.toFixed(4)},
-               ${longitude.toFixed(4)}`
-          }))
-
           try {
 
             const response =
@@ -234,6 +291,8 @@ useEffect(() => {
 
             const area =
               data.address.suburb ||
+              data.address.neighbourhood ||
+              data.address.road ||
               data.address.city ||
               data.address.town ||
               data.address.village ||
@@ -241,11 +300,25 @@ useEffect(() => {
 
             setUserLocation(area)
 
+            setFormData((prev) => ({
+              ...prev,
+              latitude,
+              longitude,
+              autoLocation: area
+            }))
+
           } catch {
 
             setUserLocation(
               'Location unavailable'
             )
+
+            setFormData((prev) => ({
+              ...prev,
+              latitude,
+              longitude,
+              autoLocation: 'Location unavailable'
+            }))
           }
         },
 
@@ -262,13 +335,6 @@ useEffect(() => {
   const detectLocation = () => {
 
     fetchUserLocation()
-  }
-
-  const handleLogout = () => {
-
-   localStorage.removeItem('user')
-
-    navigate('/')
   }
 
   const handleImageChange = (e) => {
@@ -355,38 +421,101 @@ useEffect(() => {
     // DATABASE INSERT
     // =========================
 
-    const { error } =
+    const complaintPayload = {
+      full_name:
+        formData.fullName,
+
+      phone:
+        formData.phone,
+
+      complaint_type:
+        formData.complaintType,
+
+      description:
+        formData.description,
+
+      latitude:
+        formData.latitude,
+
+      longitude:
+        formData.longitude,
+
+      image_url:
+        imageUrl,
+
+      status:
+        'Pending',
+
+      progress: 25
+    }
+
+    const complaintPayloadWithUser = {
+      ...complaintPayload,
+      user_id:
+        userData?.id || null,
+      user_email:
+        userData?.email || null,
+      location_name:
+        formData.autoLocation ||
+        userLocation ||
+        null
+    }
+
+    const complaintPayloadWithLocation = {
+      ...complaintPayload,
+      location_name:
+        formData.autoLocation ||
+        userLocation ||
+        null
+    }
+
+    let { error } =
       await supabase
         .from('complaints')
         .insert([
-          {
-            full_name:
-              formData.fullName,
-
-            phone:
-              formData.phone,
-
-            complaint_type:
-              formData.complaintType,
-
-            description:
-              formData.description,
-
-            latitude:
-              formData.latitude,
-
-            longitude:
-              formData.longitude,
-
-            image_url:
-              imageUrl,
-
-            status:
-              'Pending',
-
-            progress: 25
-          }
+          complaintPayloadWithUser
         ])
+
+    if (
+      error &&
+      (
+        error.message?.includes('user_id') ||
+        error.message?.includes('user_email') ||
+        error.message?.includes('location_name') ||
+        error.message?.includes('schema cache')
+      )
+    ) {
+      const retryPayload =
+        (
+          error.message?.includes('user_id') ||
+          error.message?.includes('user_email')
+        )
+          ? complaintPayloadWithLocation
+          : complaintPayload
+
+      const retry =
+        await supabase
+          .from('complaints')
+          .insert([
+            retryPayload
+          ])
+
+      error = retry.error
+
+      if (
+        error &&
+        error.message?.includes('location_name')
+      ) {
+        const finalRetry =
+          await supabase
+            .from('complaints')
+            .insert([
+              complaintPayload
+            ])
+
+        error = finalRetry.error
+      }
+    }
 
     if (error) {
 
@@ -407,7 +536,7 @@ useEffect(() => {
     // REFRESH COMPLAINTS
     // =========================
 
-    fetchComplaints()
+    fetchComplaints(userData)
 
     // =========================
     // RESET FORM
@@ -443,17 +572,7 @@ useEffect(() => {
     return (
       <>
 
-        <div className="topbar">
-
-          <div className="search-section">
-
-            <input
-              type="text"
-              placeholder="Search"
-              className="search-input"
-            />
-
-          </div>
+        <div className="topbar dashboard-topbar-compact">
 
           <div className="top-buttons">
 
@@ -465,7 +584,7 @@ useEffect(() => {
 
   <button className="top-btn">
 
-    Smart Alerts
+    {userLocation}
 
   </button>
 
@@ -475,7 +594,7 @@ useEffect(() => {
 
 
         <div className="map-section">
-          <MapShell />
+          <MapShell complaints={complaints} />
         </div>
 
         <div className="bottom-panel">
@@ -837,7 +956,53 @@ useEffect(() => {
     return status || 'Pending'
   }
 
+  const getLocationText = (item) => {
+
+    const latitude =
+      Number(item.latitude)
+
+    const longitude =
+      Number(item.longitude)
+
+    const coordinates =
+      Number.isFinite(latitude) &&
+      Number.isFinite(longitude)
+        ? `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`
+        : ''
+
+    return (
+      item.location_name ||
+      item.area_name ||
+      item.area ||
+      item.location ||
+      coordinates ||
+      'Location not available'
+    )
+  }
+
   const renderTrackComplaints = () => {
+
+    const complaintSearchText =
+      complaintSearch.trim().toLowerCase()
+
+    const visibleComplaints =
+      complaints.filter((item) => {
+
+        if (!complaintSearchText) {
+          return true
+        }
+
+        return [
+          item.id,
+          item.complaint_type,
+          item.description,
+          item.status,
+          getDepartmentName(item.complaint_type),
+          getLocationText(item)
+        ]
+          .map(value => String(value || '').toLowerCase())
+          .some(value => value.includes(complaintSearchText))
+      })
 
     return (
 
@@ -850,15 +1015,29 @@ useEffect(() => {
           </h1>
 
           <div className="track-count">
-            Total : {complaints.length}
+            Total : {visibleComplaints.length}
           </div>
+
+        </div>
+
+        <div className="complaint-search-bar">
+
+          <input
+            type="text"
+            value={complaintSearch}
+            onChange={(event) =>
+              setComplaintSearch(event.target.value)
+            }
+            placeholder="Search your complaints by type, status, department, location..."
+            className="search-input complaint-search-input"
+          />
 
         </div>
 
         <div className="complaint-progress-list">
 
           {
-            complaints.map((item) => (
+            visibleComplaints.map((item) => (
 
               <div
                 key={item.id}
@@ -894,9 +1073,7 @@ useEffect(() => {
                     <div className="progress-location">
                       Location :
                       {' '}
-                      {item.latitude?.toFixed(4)},
-                      {' '}
-                      {item.longitude?.toFixed(4)}
+                      {getLocationText(item)}
                     </div>
 
                     <div className="department-line">
@@ -943,26 +1120,92 @@ useEffect(() => {
     )
   }
 
-  const renderHeatmap = () => {
+  const renderNotifications = () => {
+
+    const resolvedComplaints =
+      complaints.filter(
+        item => item.status === 'Resolved'
+      )
 
     return (
 
       <div className="tab-page">
 
-        <h1 className="page-title">
-          Heatmap Analytics
-        </h1>
+        <div className="track-header">
 
-        <div className="heatmap-coming">
+          <h1 className="page-title">
+            Notifications
+          </h1>
 
-          <h2>
-            Heatmap Visualization Coming Soon
-          </h2>
+          <div className="track-count">
+            Total : {resolvedComplaints.length}
+          </div>
 
-          <p>
-            Complaint density and analytics
-            will be shown here.
-          </p>
+        </div>
+
+        <div className="complaint-progress-list">
+
+          {
+            resolvedComplaints.length
+            ? resolvedComplaints.map((item) => (
+
+              <div
+                key={item.id}
+                className="progress-card-box"
+              >
+
+                <div className="progress-top">
+
+                  <div>
+                    <h2>{item.complaint_type}</h2>
+                    <p>
+                      Complaint #{item.id} has been completed.
+                    </p>
+                  </div>
+
+                  <span className="status-badge resolved-badge">
+                    Completed
+                  </span>
+
+                </div>
+
+                <div className="department-line">
+                  Location : {getLocationText(item)}
+                </div>
+
+                <div className="department-line">
+                  Department : {getDepartmentName(item.complaint_type)}
+                </div>
+
+                {
+                  item.notification_sent_at && (
+                    <div className="department-line">
+                      Notified on : {
+                        new Date(item.notification_sent_at)
+                          .toLocaleString()
+                      }
+                    </div>
+                  )
+                }
+
+                {
+                  item.completion_image_url && (
+                    <img
+                      src={item.completion_image_url}
+                      alt="completion proof"
+                      className="table-image proof-image"
+                    />
+                  )
+                }
+
+              </div>
+            ))
+            : (
+              <div className="empty-workflow-state">
+                No completion notifications yet.
+              </div>
+            )
+          }
 
         </div>
 
@@ -980,8 +1223,8 @@ useEffect(() => {
       return renderTrackComplaints()
     }
 
-    if (activeTab === 'heatmap') {
-      return renderHeatmap()
+    if (activeTab === 'notifications') {
+      return renderNotifications()
     }
 
     return renderDashboard()

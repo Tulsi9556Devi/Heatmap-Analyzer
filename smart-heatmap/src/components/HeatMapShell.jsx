@@ -25,16 +25,15 @@ const HeatLayer = ({ points }) => {
 
     const heatLayer =
       L.heatLayer(points, {
-        radius: 38,
-        blur: 28,
+        radius: 50,
+        blur: 30,
         maxZoom: 17,
-        minOpacity: 0.35,
+        max: 1,
+        minOpacity: 0.36,
         gradient: {
-          0.2: '#2b83ff',
-          0.4: '#00d4ff',
-          0.6: '#00ff95',
-          0.8: '#ffe600',
-          1.0: '#ff2b2b'
+          0.2: '#22c55e',
+          0.5: '#facc15',
+          0.85: '#ef4444'
         }
       }).addTo(map)
 
@@ -75,17 +74,66 @@ const HeatMapShell = ({ complaints = [] }) => {
   const points =
     useMemo(() => {
 
-      return complaints
+      const locationGroups =
+        complaints
         .filter(
           item =>
             Number.isFinite(Number(item.latitude)) &&
             Number.isFinite(Number(item.longitude))
         )
-        .map(item => ([
-          Number(item.latitude),
-          Number(item.longitude),
-          1
-        ]))
+        .reduce((acc, item) => {
+
+          const latitude =
+            Number(item.latitude)
+
+          const longitude =
+            Number(item.longitude)
+
+          const key =
+            `${latitude.toFixed(3)}:${longitude.toFixed(3)}`
+
+          if (!acc[key]) {
+            acc[key] = {
+              latitude,
+              longitude,
+              weight: 0
+            }
+          }
+
+          acc[key].weight += 1
+
+          return acc
+
+        }, {})
+
+      const groupedZones =
+        Object.values(locationGroups)
+
+      const maxWeight =
+        Math.max(
+          1,
+          ...groupedZones.map(zone => zone.weight)
+        )
+
+      const heatPoints =
+        groupedZones.map((zone) => {
+
+          const intensity =
+            maxWeight <= 1
+              ? 0.55
+              : Math.max(
+                  0.28,
+                  zone.weight / maxWeight
+                )
+
+          return [
+            zone.latitude,
+            zone.longitude,
+            intensity
+          ]
+        })
+
+      return heatPoints
 
     }, [complaints])
 

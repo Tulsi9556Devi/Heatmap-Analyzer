@@ -30,32 +30,77 @@ L.Icon.Default.mergeOptions({
     'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png'
 })
 
-const MapShell = () => {
+const getMarkerColor = (status) => {
 
-  const [complaints, setComplaints] =
+  if (status === 'Resolved') {
+    return '#22c55e'
+  }
+
+  if (
+    status === 'In Progress' ||
+    status === 'Reached to Department'
+  ) {
+    return '#facc15'
+  }
+
+  return '#ef4444'
+}
+
+const getStatusIcon = (status) =>
+  L.divIcon({
+    className: 'complaint-status-marker',
+    html: `
+      <span
+        class="pin-head"
+        style="background:${getMarkerColor(status)};"
+      ></span>
+      <span
+        class="pin-tip"
+        style="background:${getMarkerColor(status)};"
+      ></span>
+    `,
+    iconSize: [34, 42],
+    iconAnchor: [17, 40],
+    popupAnchor: [0, -36]
+  })
+
+const MapShell = ({
+  complaints = null
+}) => {
+
+  const [fetchedComplaints, setFetchedComplaints] =
     useState([])
 
   useEffect(() => {
 
-    fetchComplaints()
-
-  }, [])
-
-  const fetchComplaints = async () => {
-
-    const { data, error } =
-      await supabase
-        .from('complaints')
-        .select('*')
-
-    if (error) {
-
-      console.log(error)
+    if (Array.isArray(complaints)) {
       return
     }
 
-    setComplaints(data)
-  }
+    const fetchComplaints = async () => {
+
+      const { data, error } =
+        await supabase
+          .from('complaints')
+          .select('*')
+
+      if (error) {
+
+        console.log(error)
+        return
+      }
+
+      setFetchedComplaints(data)
+    }
+
+    fetchComplaints()
+
+  }, [complaints])
+
+  const visibleComplaints =
+    Array.isArray(complaints)
+      ? complaints
+      : fetchedComplaints
 
   return (
 
@@ -74,11 +119,11 @@ const MapShell = () => {
         />
 
         {
-          complaints.map((item) => {
+          visibleComplaints.map((item) => {
 
             if (
-              !item.latitude ||
-              !item.longitude
+              !Number.isFinite(Number(item.latitude)) ||
+              !Number.isFinite(Number(item.longitude))
             ) {
               return null
             }
@@ -87,9 +132,10 @@ const MapShell = () => {
 
               <Marker
                 key={item.id}
+                icon={getStatusIcon(item.status)}
                 position={[
-                  item.latitude,
-                  item.longitude
+                  Number(item.latitude),
+                  Number(item.longitude)
                 ]}
               >
 

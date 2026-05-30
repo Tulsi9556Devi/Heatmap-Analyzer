@@ -2,7 +2,10 @@ import {
   FaClipboardList,
   FaMapMarkedAlt,
   FaFire,
-  FaChartPie
+  FaChartPie,
+  FaUserCircle,
+  FaBell,
+  FaCheckCircle
 } from 'react-icons/fa'
 
 const Sidebar = ({
@@ -14,37 +17,17 @@ const Sidebar = ({
   const displayName =
     userData?.full_name ||
     userData?.name ||
+    userData?.department ||
     userData?.dept_name ||
     'Citizen'
 
   const isDepartment =
     userData?.role === 'department' ||
+    Boolean(userData?.department) ||
     Boolean(userData?.dept_name)
 
-  // =========================
-  // PROFILE IMAGE BY ROLE
-  // =========================
-
-  let profileImage =
-    'https://i.pravatar.cc/150?img=12'
-
-if (userData?.role === 'admin') {
-
-  profileImage =
-    'https://i.pravatar.cc/150?img=68'
-}
-
-else if (isDepartment) {
-
-  profileImage =
-    'https://i.pravatar.cc/150?img=12'
-}
-
-else {
-
-  profileImage =
-    'https://i.pravatar.cc/150?img=32'
-}
+  const isAdmin =
+    userData?.role === 'admin'
 
   return (
 
@@ -54,11 +37,9 @@ else {
 
         <div className="profile-section">
 
-          <img
-            src={profileImage}
-            alt="profile"
-            className="profile-image"
-          />
+          <div className="profile-image profile-placeholder">
+            <FaUserCircle />
+          </div>
 
           <h2>
             Welcome {displayName}!
@@ -89,23 +70,44 @@ else {
             Dashboard
           </button>
 
-          <button
-            className={`menu-btn ${
-              activeTab === 'complaints'
-                ? 'active-btn'
-                : ''
-            }`}
-            onClick={() =>
-              setActiveTab('complaints')
-            }
-          >
-            <FaClipboardList />
-            Complaints
-          </button>
-
           {
             !isDepartment && (
-              <>
+              <button
+                className={`menu-btn ${
+                  activeTab === 'complaints'
+                    ? 'active-btn'
+                    : ''
+                }`}
+                onClick={() =>
+                  setActiveTab('complaints')
+                }
+              >
+                <FaClipboardList />
+                Complaints
+              </button>
+            )
+          }
+
+          {
+            isAdmin && (
+              <button
+                className={`menu-btn ${
+                  activeTab === 'resolved'
+                    ? 'active-btn'
+                    : ''
+                }`}
+                onClick={() =>
+                  setActiveTab('resolved')
+                }
+              >
+                <FaCheckCircle />
+                Resolved
+              </button>
+            )
+          }
+
+          {
+            !isDepartment && !isAdmin && (
                 <button
                   className={`menu-btn ${
                     activeTab === 'track'
@@ -119,7 +121,12 @@ else {
                   <FaMapMarkedAlt />
                   Track Complaint
                 </button>
+            )
+          }
 
+          {
+            isDepartment || isAdmin
+              ? (
                 <button
                   className={`menu-btn ${
                     activeTab === 'heatmap'
@@ -133,8 +140,22 @@ else {
                   <FaFire />
                   Heatmap
                 </button>
-              </>
-            )
+              )
+              : (
+                <button
+                  className={`menu-btn ${
+                    activeTab === 'notifications'
+                      ? 'active-btn'
+                      : ''
+                  }`}
+                  onClick={() =>
+                    setActiveTab('notifications')
+                  }
+                >
+                  <FaBell />
+                  Notifications
+                </button>
+              )
           }
 
         </div>

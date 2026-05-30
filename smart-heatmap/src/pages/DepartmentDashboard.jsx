@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import DashboardLayout from '../components/layouts/DashboardLayout'
+import HeatMapShell from '../components/HeatMapShell'
 import { supabase } from '../services/supabase'
 
 const DepartmentDashboard = () => {
@@ -10,10 +11,15 @@ const DepartmentDashboard = () => {
   const [complaints, setComplaints] =
     useState([])
 
-  const userData =
-    JSON.parse(
-      localStorage.getItem('user')
-    )
+  const [completionProofs, setCompletionProofs] =
+    useState({})
+
+  const userData = {
+    ...JSON.parse(
+      localStorage.getItem('user') || '{}'
+    ),
+    role: 'department'
+  }
 
   const getDepartmentKeyFromText = (value) => {
 
@@ -115,7 +121,59 @@ const DepartmentDashboard = () => {
     )
   }
 
+  const handleProofChange = (
+    id,
+    file
+  ) => {
+
+    setCompletionProofs((prev) => ({
+      ...prev,
+      [id]: file
+    }))
+  }
+
+  const isMissingWorkflowColumnError = (error) =>
+    error?.message?.includes('schema cache') ||
+    error?.message?.includes('completion_image_url') ||
+    error?.message?.includes('notification_sent') ||
+    error?.message?.includes('notification_sent_at')
+
   const markComplete = async (id) => {
+
+    const proofFile =
+      completionProofs[id]
+
+    if (!proofFile) {
+      alert('Please upload proof of completion before marking complete.')
+      return
+    }
+
+    const fileName =
+      `completion-${id}-${Date.now()}-${proofFile.name}`
+
+    const { error: uploadError } =
+      await supabase.storage
+        .from('complaint-images')
+        .upload(fileName, proofFile)
+
+    if (uploadError) {
+
+      console.log('PROOF UPLOAD ERROR:', uploadError)
+      alert('Proof upload failed')
+      return
+    }
+
+    const {
+      data: imageData
+    } = supabase.storage
+      .from('complaint-images')
+      .getPublicUrl(fileName)
+
+    const completionImageUrl =
+      imageData.publicUrl
+
+    const now =
+      new Date().toISOString()
 
     setComplaints((prev) =>
       prev.map((item) =>
@@ -123,13 +181,17 @@ const DepartmentDashboard = () => {
           ? {
               ...item,
               status: 'Resolved',
-              progress: 100
+              progress: 100,
+              completion_image_url:
+                completionImageUrl,
+              notification_sent: true,
+              notification_sent_at: now
             }
           : item
       )
     )
 
-    const {
+    let {
       data,
       error
     } =
@@ -137,10 +199,32 @@ const DepartmentDashboard = () => {
         .from('complaints')
         .update({
           status: 'Resolved',
-          progress: 100
+          progress: 100,
+          completion_image_url:
+            completionImageUrl,
+          notification_sent: true,
+          notification_sent_at: now
         })
         .eq('id', id)
         .select()
+
+    if (
+      error &&
+      isMissingWorkflowColumnError(error)
+    ) {
+      const retry =
+        await supabase
+          .from('complaints')
+          .update({
+            status: 'Resolved',
+            progress: 100
+          })
+          .eq('id', id)
+          .select()
+
+      data = retry.data
+      error = retry.error
+    }
 
     if (error) {
 
@@ -162,6 +246,16 @@ const DepartmentDashboard = () => {
       fetchComplaints()
       return
     }
+
+    setCompletionProofs((prev) => {
+
+      const next = {
+        ...prev
+      }
+
+      delete next[id]
+      return next
+    })
 
     fetchComplaints()
   }
@@ -218,6 +312,30 @@ const DepartmentDashboard = () => {
     }
 
     return status || 'Reached to Department'
+  }
+
+  const getLocationText = (item) => {
+
+    const latitude =
+      Number(item.latitude)
+
+    const longitude =
+      Number(item.longitude)
+
+    const coordinates =
+      Number.isFinite(latitude) &&
+      Number.isFinite(longitude)
+        ? `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`
+        : ''
+
+    return (
+      item.location_name ||
+      item.area_name ||
+      item.area ||
+      item.location ||
+      coordinates ||
+      'Location not available'
+    )
   }
 
   const renderDashboard = () => {
@@ -322,9 +440,7 @@ const DepartmentDashboard = () => {
               <div className="progress-location">
                 Location :
                 {' '}
-                {item.latitude?.toFixed(4)},
-                {' '}
-                {item.longitude?.toFixed(4)}
+                {getLocationText(item)}
               </div>
 
               <div className="progress-bar-wrapper">
@@ -358,7 +474,8 @@ const DepartmentDashboard = () => {
                 </span>
 
                 {
-                  item.status === 'Resolved'
+                  item.status === 'Resolved' &&
+                  item.notification_sent
                   ? (
                     <button
                       type="button"
@@ -369,15 +486,31 @@ const DepartmentDashboard = () => {
                     </button>
                   )
                   : (
-                    <button
-                      type="button"
-                      className="workflow-action-btn"
-                      onClick={() =>
-                        markComplete(item.id)
-                      }
-                    >
-                      Mark Complete
-                    </button>
+                    <div className="proof-action-group">
+
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="proof-input"
+                        onChange={(event) =>
+                          handleProofChange(
+                            item.id,
+                            event.target.files[0]
+                          )
+                        }
+                      />
+
+                      <button
+                        type="button"
+                        className="workflow-action-btn"
+                        onClick={() =>
+                          markComplete(item.id)
+                        }
+                      >
+                        Send Completion
+                      </button>
+
+                    </div>
                   )
                 }
 
@@ -393,26 +526,26 @@ const DepartmentDashboard = () => {
 
   const renderContent = () => {
 
-    if (activeTab === 'complaints') {
+    if (activeTab === 'heatmap') {
       return (
-        <div className="tab-page">
+        <div className="tab-page department-heatmap-page">
+
           <div className="track-header">
+
             <h1 className="page-title">
-              Department Complaints
+              Department Heatmap
             </h1>
+
             <div className="track-count">
               Total : {complaints.length}
             </div>
+
           </div>
-          {
-            complaints.length
-            ? renderComplaints()
-            : (
-              <div className="empty-workflow-state">
-                No forwarded complaints for this department yet.
-              </div>
-            )
-          }
+
+          <div className="admin-map-wrapper department-heatmap-wrapper">
+            <HeatMapShell complaints={complaints} />
+          </div>
+
         </div>
       )
     }

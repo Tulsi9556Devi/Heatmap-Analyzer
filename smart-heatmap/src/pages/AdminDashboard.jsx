@@ -6,11 +6,21 @@ import { supabase } from '../services/supabase'
 
 const AdminDashboard = () => {
 
+  const userData = {
+    ...JSON.parse(
+      localStorage.getItem('user') || '{}'
+    ),
+    role: 'admin'
+  }
+
   const [activeTab, setActiveTab] =
     useState('dashboard')
 
   const [complaints, setComplaints] =
     useState([])
+
+  const [complaintSearch, setComplaintSearch] =
+    useState('')
 
   const [temperature, setTemperature] =
     useState('--')
@@ -223,6 +233,74 @@ const AdminDashboard = () => {
     updateStatus(id, 'In Progress')
   }
 
+  const isMissingColumnError = (error) =>
+    error?.message?.includes('schema cache') ||
+    error?.message?.includes('notification_sent') ||
+    error?.message?.includes('notification_sent_at')
+
+  const sendCompletionNotification = async (id) => {
+
+    const now =
+      new Date().toISOString()
+
+    const baseUpdate =
+      await supabase
+        .from('complaints')
+        .update({
+          status: 'Resolved',
+          progress: 100
+        })
+        .eq('id', id)
+        .select()
+
+    if (baseUpdate.error) {
+
+      console.log('NOTIFICATION BASE UPDATE ERROR:', baseUpdate.error)
+      alert(`Notification failed: ${baseUpdate.error.message}`)
+      return
+    }
+
+    let data =
+      baseUpdate.data
+
+    const workflowUpdate =
+      await supabase
+        .from('complaints')
+        .update({
+          notification_sent: true,
+          notification_sent_at: now
+        })
+        .eq('id', id)
+        .select()
+
+    if (!workflowUpdate.error) {
+      data = workflowUpdate.data
+    } else if (!isMissingColumnError(workflowUpdate.error)) {
+      console.log('NOTIFICATION WORKFLOW UPDATE ERROR:', workflowUpdate.error)
+    }
+
+    if (!data || data.length === 0) {
+
+      alert('Notification failed: complaint was not updated.')
+      return
+    }
+
+    setComplaints((prev) =>
+      prev.map((item) =>
+        item.id === id
+          ? {
+              ...data[0],
+              notification_sent: true,
+              notification_sent_at:
+                data[0].notification_sent_at || now
+            }
+          : item
+      )
+    )
+
+    alert('User notification sent')
+  }
+
   const getDepartmentName = (type) => {
 
     const complaintType =
@@ -320,6 +398,30 @@ const AdminDashboard = () => {
     return status || 'Pending'
   }
 
+  const getLocationText = (item) => {
+
+    const latitude =
+      Number(item.latitude)
+
+    const longitude =
+      Number(item.longitude)
+
+    const coordinates =
+      Number.isFinite(latitude) &&
+      Number.isFinite(longitude)
+        ? `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`
+        : ''
+
+    return (
+      item.location_name ||
+      item.area_name ||
+      item.area ||
+      item.location ||
+      coordinates ||
+      'Location not available'
+    )
+  }
+
   // =========================
   // COUNTS
   // =========================
@@ -377,6 +479,42 @@ const AdminDashboard = () => {
           ) * 100
         )
       : 0
+
+  const activeComplaintList =
+    complaints.filter(
+      item => item.status !== 'Resolved'
+    )
+
+  const complaintSearchText =
+    complaintSearch.trim().toLowerCase()
+
+  const matchesComplaintSearch = (item) => {
+
+    if (!complaintSearchText) {
+      return true
+    }
+
+    return [
+      item.id,
+      item.full_name,
+      item.phone,
+      item.complaint_type,
+      item.description,
+      item.status,
+      getDepartmentName(item.complaint_type),
+      getLocationText(item)
+    ]
+      .map(value => String(value || '').toLowerCase())
+      .some(value => value.includes(complaintSearchText))
+  }
+
+  const visibleActiveComplaintList =
+    activeComplaintList.filter(matchesComplaintSearch)
+
+  const resolvedComplaintList =
+    complaints.filter(
+      item => item.status === 'Resolved'
+    )
 
   // =========================
   // DASHBOARD
@@ -505,15 +643,29 @@ const AdminDashboard = () => {
           </h1>
 
           <div className="track-count">
-            Total : {complaints.length}
+            Total : {visibleActiveComplaintList.length}
           </div>
+
+        </div>
+
+        <div className="complaint-search-bar">
+
+          <input
+            type="text"
+            value={complaintSearch}
+            onChange={(event) =>
+              setComplaintSearch(event.target.value)
+            }
+            placeholder="Search by name, type, status, department, location..."
+            className="search-input complaint-search-input"
+          />
 
         </div>
 
         <div className="complaint-progress-list">
 
           {
-            complaints.map((item) => (
+            visibleActiveComplaintList.map((item) => (
 
               <div
                 key={item.id}
@@ -549,13 +701,7 @@ const AdminDashboard = () => {
 
                   📍
 
-                  {
-                    item.latitude &&
-                    item.longitude
-                    ? `${item.latitude.toFixed(4)},
-                       ${item.longitude.toFixed(4)}`
-                    : 'N/A'
-                  }
+                  {getLocationText(item)}
 
                 </div>
 
@@ -624,6 +770,112 @@ const AdminDashboard = () => {
               </div>
 
             ))
+          }
+
+        </div>
+
+      </div>
+    )
+  }
+
+  const renderResolvedComplaints = () => {
+
+    return (
+
+      <div className="tab-page">
+
+        <div className="track-header">
+
+          <h1 className="page-title">
+            Resolved Complaints
+          </h1>
+
+          <div className="track-count">
+            Total : {resolvedComplaintList.length}
+          </div>
+
+        </div>
+
+        <div className="complaint-progress-list">
+
+          {
+            resolvedComplaintList.length
+            ? resolvedComplaintList.map((item) => (
+
+              <div
+                key={item.id}
+                className="progress-card-box"
+              >
+
+                <div className="progress-top">
+
+                  <div>
+                    <h2>{item.complaint_type}</h2>
+                    <p>{item.full_name}</p>
+                  </div>
+
+                  <span className="status-badge resolved-badge">
+                    Completed
+                  </span>
+
+                </div>
+
+                <div className="progress-location">
+                  Location : {getLocationText(item)}
+                </div>
+
+                <div className="department-line">
+                  Department : {getDepartmentName(item.complaint_type)}
+                </div>
+
+                {
+                  item.completion_image_url && (
+                    <img
+                      src={item.completion_image_url}
+                      alt="completion proof"
+                      className="table-image proof-image"
+                    />
+                  )
+                }
+
+                <div className="progress-bottom">
+
+                  <span>
+                    {
+                      item.notification_sent
+                      ? 'User has been notified'
+                      : 'Ready to notify user'
+                    }
+                  </span>
+
+                  <button
+                    type="button"
+                    className={
+                      item.notification_sent
+                      ? 'workflow-action-btn completed-action'
+                      : 'workflow-action-btn'
+                    }
+                    disabled={Boolean(item.notification_sent)}
+                    onClick={() =>
+                      sendCompletionNotification(item.id)
+                    }
+                  >
+                    {
+                      item.notification_sent
+                      ? 'Notified'
+                      : 'Send Notification'
+                    }
+                  </button>
+
+                </div>
+
+              </div>
+            ))
+            : (
+              <div className="empty-workflow-state">
+                No resolved complaints yet.
+              </div>
+            )
           }
 
         </div>
@@ -710,6 +962,10 @@ const AdminDashboard = () => {
       return renderManageComplaints()
     }
 
+    if (activeTab === 'resolved') {
+      return renderResolvedComplaints()
+    }
+
     if (activeTab === 'heatmap') {
       return renderAnalytics()
     }
@@ -722,6 +978,7 @@ const AdminDashboard = () => {
     <DashboardLayout
       activeTab={activeTab}
       setActiveTab={setActiveTab}
+      userData={userData}
     >
 
       {renderContent()}
