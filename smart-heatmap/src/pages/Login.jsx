@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 import { supabase } from '../services/supabase'
+import bcrypt from 'bcryptjs'
 
 const Login = () => {
 
@@ -51,19 +52,23 @@ const Login = () => {
 
         const admin = adminData[0]
 
-        if (
-          admin.password === cleanPassword
-        ) {
+        const adminValid =
+       await bcrypt.compare(
+       cleanPassword,
+       admin.password
+        )
 
-          localStorage.setItem(
-            'user',
-            JSON.stringify(admin)
-          )
+      if (adminValid) {
 
-          navigate('/admin-dashboard')
+      localStorage.setItem(
+     'user',
+      JSON.stringify(admin)
+     )
 
-          return
-        }
+    navigate('/admin-dashboard')
+ 
+    return
+    }
       }
 
       // =========================
@@ -129,19 +134,23 @@ const Login = () => {
 
         const user = userData[0]
 
-        if (
-          user.password === cleanPassword
-        ) {
+        const userValid =
+  await bcrypt.compare(
+    cleanPassword,
+    user.password
+  )
 
-          localStorage.setItem(
-            'user',
-            JSON.stringify(user)
-          )
+if (userValid) {
 
-          navigate('/user-dashboard')
+  localStorage.setItem(
+    'user',
+    JSON.stringify(user)
+  )
 
-          return
-        }
+  navigate('/user-dashboard')
+
+  return
+}
       }
 
       alert('Invalid Credentials')
@@ -189,17 +198,23 @@ const Login = () => {
       return
     }
 
-    const { error } =
-      await supabase
-        .from('users')
-        .insert([
-          {
-            full_name: fullName,
-            email: email.trim().toLowerCase(),
-            password: password.trim(),
-            role: 'user'
-          }
-        ])
+    const hashedPassword =
+  await bcrypt.hash(
+    password.trim(),
+    10
+  )
+
+const { error } =
+  await supabase
+    .from('users')
+    .insert([
+      {
+        full_name: fullName,
+        email: email.trim().toLowerCase(),
+        password: hashedPassword,
+        role: 'user'
+      }
+    ])
 
     if (error) {
 
