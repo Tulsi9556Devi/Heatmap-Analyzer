@@ -357,6 +357,14 @@ useEffect(() => {
     })
   }
 
+  const isValidPhoneNumber = (phone) => {
+
+    return (
+      /^[6-9]\d{9}$/.test(phone) &&
+      !/^(\d)\1{9}$/.test(phone)
+    )
+  }
+
   const handleSubmit = async (e) => {
 
   e.preventDefault()
@@ -371,6 +379,14 @@ useEffect(() => {
   ) {
 
     alert('Please fill all required fields')
+    return
+  }
+
+  if (!isValidPhoneNumber(formData.phone)) {
+
+    alert(
+      'Please enter a valid 10 digit Indian mobile number starting with 6, 7, 8, or 9.'
+    )
     return
   }
 
@@ -678,7 +694,9 @@ useEffect(() => {
                   name="fullName"
                   placeholder="Enter Full Name"
                   value={formData.fullName}
-                  onChange={handleChange}
+                  readOnly
+                  className="location-input"
+                  autoComplete="name"
                   required
                 />
 
@@ -695,6 +713,7 @@ useEffect(() => {
                   name="phone"
                   placeholder="Enter 10 Digit Phone Number"
                   value={formData.phone}
+                  inputMode="numeric"
                   onChange={(e) => {
 
                     const value =
@@ -708,8 +727,10 @@ useEffect(() => {
                       })
                     }
                   }}
-                  pattern="[0-9]{10}"
+                  pattern="[6-9][0-9]{9}"
+                  title="Enter a valid 10 digit Indian mobile number starting with 6, 7, 8, or 9."
                   maxLength={10}
+                  autoComplete="tel"
                   required
                 />
 

@@ -132,12 +132,6 @@ const DepartmentDashboard = () => {
     }))
   }
 
-  const isMissingWorkflowColumnError = (error) =>
-    error?.message?.includes('schema cache') ||
-    error?.message?.includes('completion_image_url') ||
-    error?.message?.includes('notification_sent') ||
-    error?.message?.includes('notification_sent_at')
-
   const markComplete = async (id) => {
 
     const proofFile =
@@ -191,7 +185,7 @@ const DepartmentDashboard = () => {
       )
     )
 
-    let {
+    const {
       data,
       error
     } =
@@ -208,28 +202,12 @@ const DepartmentDashboard = () => {
         .eq('id', id)
         .select()
 
-    if (
-      error &&
-      isMissingWorkflowColumnError(error)
-    ) {
-      const retry =
-        await supabase
-          .from('complaints')
-          .update({
-            status: 'Resolved',
-            progress: 100
-          })
-          .eq('id', id)
-          .select()
-
-      data = retry.data
-      error = retry.error
-    }
-
     if (error) {
 
       console.log('COMPLETE UPDATE ERROR:', error)
-      alert(`Completion update failed: ${error.message}`)
+      alert(
+        `Completion update failed: ${error.message}. Please apply the complaint workflow database migration so proof images can be saved.`
+      )
       fetchComplaints()
       return
     }
@@ -474,8 +452,7 @@ const DepartmentDashboard = () => {
                 </span>
 
                 {
-                  item.status === 'Resolved' &&
-                  item.notification_sent
+                  item.status === 'Resolved'
                   ? (
                     <button
                       type="button"

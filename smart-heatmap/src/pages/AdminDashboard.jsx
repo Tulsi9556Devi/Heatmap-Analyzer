@@ -230,75 +230,7 @@ const AdminDashboard = () => {
   }
 
   const approveComplaint = (id) => {
-    updateStatus(id, 'In Progress')
-  }
-
-  const isMissingColumnError = (error) =>
-    error?.message?.includes('schema cache') ||
-    error?.message?.includes('notification_sent') ||
-    error?.message?.includes('notification_sent_at')
-
-  const sendCompletionNotification = async (id) => {
-
-    const now =
-      new Date().toISOString()
-
-    const baseUpdate =
-      await supabase
-        .from('complaints')
-        .update({
-          status: 'Resolved',
-          progress: 100
-        })
-        .eq('id', id)
-        .select()
-
-    if (baseUpdate.error) {
-
-      console.log('NOTIFICATION BASE UPDATE ERROR:', baseUpdate.error)
-      alert(`Notification failed: ${baseUpdate.error.message}`)
-      return
-    }
-
-    let data =
-      baseUpdate.data
-
-    const workflowUpdate =
-      await supabase
-        .from('complaints')
-        .update({
-          notification_sent: true,
-          notification_sent_at: now
-        })
-        .eq('id', id)
-        .select()
-
-    if (!workflowUpdate.error) {
-      data = workflowUpdate.data
-    } else if (!isMissingColumnError(workflowUpdate.error)) {
-      console.log('NOTIFICATION WORKFLOW UPDATE ERROR:', workflowUpdate.error)
-    }
-
-    if (!data || data.length === 0) {
-
-      alert('Notification failed: complaint was not updated.')
-      return
-    }
-
-    setComplaints((prev) =>
-      prev.map((item) =>
-        item.id === id
-          ? {
-              ...data[0],
-              notification_sent: true,
-              notification_sent_at:
-                data[0].notification_sent_at || now
-            }
-          : item
-      )
-    )
-
-    alert('User notification sent')
+    updateStatus(id, 'Reached to Department')
   }
 
   const getDepartmentName = (type) => {
@@ -844,28 +776,9 @@ const AdminDashboard = () => {
                     {
                       item.notification_sent
                       ? 'User has been notified'
-                      : 'Ready to notify user'
+                      : 'Notification handled by department'
                     }
                   </span>
-
-                  <button
-                    type="button"
-                    className={
-                      item.notification_sent
-                      ? 'workflow-action-btn completed-action'
-                      : 'workflow-action-btn'
-                    }
-                    disabled={Boolean(item.notification_sent)}
-                    onClick={() =>
-                      sendCompletionNotification(item.id)
-                    }
-                  >
-                    {
-                      item.notification_sent
-                      ? 'Notified'
-                      : 'Send Notification'
-                    }
-                  </button>
 
                 </div>
 

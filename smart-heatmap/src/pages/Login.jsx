@@ -1,5 +1,9 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import {
+  FaEye,
+  FaEyeSlash
+} from 'react-icons/fa'
 
 import { supabase } from '../services/supabase'
 import bcrypt from 'bcryptjs'
@@ -19,6 +23,62 @@ const Login = () => {
 
   const [password, setPassword] =
     useState('')
+
+  const [showPassword, setShowPassword] =
+    useState(false)
+
+  const namePattern =
+    /^[A-Za-z]+(?:[ .'-][A-Za-z]+)*$/
+
+  const emailPattern =
+    /^[A-Za-z0-9](?:[A-Za-z0-9._%+-]{0,62}[A-Za-z0-9])?@(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z]{2,}$/
+
+  const passwordPattern =
+    /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/
+
+  const validateSignup = () => {
+
+    const cleanName =
+      fullName.trim().replace(/\s+/g, ' ')
+
+    const cleanEmail =
+      email.trim().toLowerCase()
+
+    const cleanPassword =
+      password.trim()
+
+    if (
+      !cleanName ||
+      !cleanEmail ||
+      !cleanPassword
+    ) {
+      return 'Please fill all fields'
+    }
+
+    if (
+      cleanName.length < 3 ||
+      cleanName.length > 60 ||
+      !namePattern.test(cleanName)
+    ) {
+      return 'Full name should contain only letters, spaces, dot, apostrophe, or hyphen.'
+    }
+
+    const emailLocalPart =
+      cleanEmail.split('@')[0] || ''
+
+    if (
+      !emailPattern.test(cleanEmail) ||
+      emailLocalPart.includes('..')
+    ) {
+      return 'Please enter a valid email address.'
+    }
+
+    if (!passwordPattern.test(cleanPassword)) {
+      return 'Password must be at least 8 characters and include uppercase, lowercase, number, and special character.'
+    }
+
+    return ''
+  }
 
   // =========================
   // LOGIN
@@ -169,15 +229,23 @@ if (userValid) {
 
   const handleSignup = async () => {
 
-    if (
-      !fullName ||
-      !email ||
-      !password
-    ) {
+    const validationError =
+      validateSignup()
 
-      alert('Please fill all fields')
+    if (validationError) {
+
+      alert(validationError)
       return
     }
+
+    const cleanName =
+      fullName.trim().replace(/\s+/g, ' ')
+
+    const cleanEmail =
+      email.trim().toLowerCase()
+
+    const cleanPassword =
+      password.trim()
 
     const {
       data: existingUser
@@ -186,7 +254,7 @@ if (userValid) {
       .select('*')
       .eq(
         'email',
-        email.trim().toLowerCase()
+        cleanEmail
       )
 
     if (
@@ -200,7 +268,7 @@ if (userValid) {
 
     const hashedPassword =
   await bcrypt.hash(
-    password.trim(),
+    cleanPassword,
     10
   )
 
@@ -209,8 +277,8 @@ const { error } =
     .from('users')
     .insert([
       {
-        full_name: fullName,
-        email: email.trim().toLowerCase(),
+        full_name: cleanName,
+        email: cleanEmail,
         password: hashedPassword,
         role: 'user'
       }
@@ -310,6 +378,11 @@ const { error } =
                         e.target.value
                       )
                     }
+                    minLength={3}
+                    maxLength={60}
+                    pattern="[A-Za-z][A-Za-z .'-]{1,58}[A-Za-z]"
+                    title="Use only letters, spaces, dot, apostrophe, or hyphen."
+                    autoComplete="name"
                     required
                   />
 
@@ -332,6 +405,9 @@ const { error } =
                     e.target.value
                   )
                 }
+                pattern="[A-Za-z0-9](?:[A-Za-z0-9._%+-]{0,62}[A-Za-z0-9])?@(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z]{2,}"
+                title="Enter a valid email address. It cannot start or end with a dot before @."
+                autoComplete="email"
                 required
               />
 
@@ -343,17 +419,57 @@ const { error } =
                 Password
               </label>
 
-              <input
-                type="password"
-                placeholder="Enter password"
-                value={password}
-                onChange={(e) =>
-                  setPassword(
-                    e.target.value
-                  )
-                }
-                required
-              />
+              <div className="password-input-wrap">
+
+                <input
+                  type={
+                    showPassword
+                    ? 'text'
+                    : 'password'
+                  }
+                  placeholder="Enter password"
+                  value={password}
+                  onChange={(e) =>
+                    setPassword(
+                      e.target.value
+                    )
+                  }
+                  minLength={8}
+                  pattern="(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}"
+                  title="Use at least 8 characters with uppercase, lowercase, number, and special character."
+                  autoComplete={
+                    isSignup
+                    ? 'new-password'
+                    : 'current-password'
+                  }
+                  required
+                />
+
+                <button
+                  type="button"
+                  className="password-toggle-btn"
+                  onClick={() =>
+                    setShowPassword((current) => !current)
+                  }
+                  aria-label={
+                    showPassword
+                    ? 'Hide password'
+                    : 'Show password'
+                  }
+                  title={
+                    showPassword
+                    ? 'Hide password'
+                    : 'Show password'
+                  }
+                >
+                  {
+                    showPassword
+                    ? <FaEyeSlash />
+                    : <FaEye />
+                  }
+                </button>
+
+              </div>
 
             </div>
 
